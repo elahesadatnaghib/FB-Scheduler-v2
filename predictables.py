@@ -58,7 +58,7 @@ def effectiveTime(airmass, extinction_coefficient=0.11):
     extinction = 10**((extinction_coefficient*(airmass - 1.))/2.5)
     return t_exp/(extinction*extinction)
 
-def Night_data(site, end_d, dt = 10 * ephem.minute, airmassLimit = 1.4):
+def Night_data(site, start_d, end_d, dt = 10 * ephem.minute, airmassLimit = 1.4):
 
     con = lite.connect('FBDE.db')
     cur = con.cursor()
@@ -97,7 +97,6 @@ def Night_data(site, end_d, dt = 10 * ephem.minute, airmassLimit = 1.4):
         rowid_moments= 0
         rowid_nights = 0
         nightid      = 0
-        start_d      = input('Please choose a starting date or inter 0 for 2021/01/01 \n')
         if start_d == 0:
             start_d = ephem.Date('2021/01/01 12:00:00.00')
 
@@ -200,6 +199,7 @@ Site.elevation  = 2650
 Site.pressure   = 0.
 Site.horizon    = 0.
 
+start_date = ephem.Date('2021/01/01 12:00:00.00')
 end_date = ephem.Date('2021/01/01 12:00:00.00') + 2
 
-Night_data(Site,end_date)
+Night_data(Site,start_date, end_date)
