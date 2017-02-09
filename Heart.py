@@ -12,15 +12,11 @@ import time
 inf = 1e10
 eps = 1e-10
 
-#temp variable
-AllF = np.zeros((4206,7))
 
 class Data(object):
     def __init__(self, date, site):
         self.Date   = date
         self.Site   = site
-
-        LastNight_start = float(date) -1; LastNight_end = float(date)
 
         ''' Predictable data '''
         # 3 by n_fields matrix of ID, RA, Dec
@@ -478,12 +474,11 @@ class TelescopeState(object):
 
 
 class FiledState(object):
-    def __init__(self, **param):
+    def __init__(self, id, ra, dec):
         # parameters (constant during the night)
-        self.id  = param.get('id')
-        self.dec = param.get('dec')
-        self.ra  = param.get('ra')
-        self.label = param.get('lbl')
+        self.id  = id
+        self.dec = dec
+        self.ra  = ra
         self.rise_t = None
         self.set_t  = None
         self.n_tot_visits  = None # total number of visits before tonight
@@ -502,7 +497,7 @@ class FiledState(object):
         self.normalized_bri      = None
         self.cov                 = None
 
-        # visit variables (gets updated only after a visit of )
+        # visit variables (gets updated only after a visit of itself)
         self.n_ton_visits = None # total number of tonight's visits
         self.t_last_visit = None # time of the last visit
 
