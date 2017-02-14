@@ -4,635 +4,375 @@ __author__ = 'Elahe'
 import ephem
 import numpy as np
 import json
-from operator import attrgetter
 from numpy import *
-import time
+import sqlite3 as lite
+from calculations import *
+import pandas as pd
 
-''' Constants '''
-inf = 1e10
-eps = 1e-10
 
-#temp variable
-AllF = np.zeros((4206,7))
-
-class Data(object):
-    def __init__(self, date, site):
-        self.Date   = date
+class DataFeed(object):
+    def __init__(self, date, site, custom_episode = False):
         self.Site   = site
 
-        LastNight_start = float(date) -1; LastNight_end = float(date)
+        night_id = int(date - ephem.Date('2020/12/31 12:00:00.00')) + 1
 
-        ''' Predictable data '''
-        # 3 by n_fields matrix of ID, RA, Dec
-        self.all_fields = np.loadtxt("NightDataInLIS/Constants/fieldID.lis", dtype = "i4, f8, f8", unpack = True)
-        self.time_slots = np.loadtxt("NightDataInLIS/TimeSlots{}.lis".format(int(ephem.julian_date(self.Date))), unpack = True)
-        self.altitudes  = np.loadtxt("NightDataInLIS/Altitudes{}.lis".format(int(ephem.julian_date(self.Date))), unpack = True)
-        self.hour_angs  = np.loadtxt("NightDataInLIS/HourAngs{}.lis".format(int(ephem.julian_date(self.Date))), unpack = True)
-        #self.Moon_seps = np.loadtxt("MoonSeps{}.lis".format(int(ephem.julian_date(self.Date))), unpack = True)
-        self.amass_cstr = np.loadtxt("NightDataInLIS/AirmassConstraints{}.lis".format(int(ephem.julian_date(self.Date))), unpack = True)
-        self.all_n_tot_visits = np.loadtxt("NightDataInLIS/tot_N_visit{}.lis".format(int(ephem.julian_date(self.Date))), dtype = "i4", unpack = True)
-        self.t_last_v_last= np.loadtxt("NightDataInLIS/t_last_visit{}.lis".format(int(ephem.julian_date(self.Date))), unpack = True)
-        self.coad_depth   = self.all_n_tot_visits / (np.max(self.all_n_tot_visits) +1 ) #!!!!! temporarily!!!!!!!! # TODO Add coadded depth module instead of visit count
-        self.vis_of_year  = np.zeros(len(self.all_fields[0]))   #!!!!! temporarily!!!!!!!! # TODO Visibility of the year is currently all zero
-        self.sci_prog     = np.zeros(len(self.all_fields[0]), dtype= 'int')   #!!!!! temporarily!!!!!!!! # TODO Science program is not considered yet
-        self.moon_sep     = np.loadtxt("NightDataInLIS/MoonSeps{}.lis".format(int(ephem.julian_date(self.Date))), unpack = True)
+        # connecting to db
+        con = lite.connect('FBDE.db')
+        cur = con.cursor()
+
+        # fields data: ID, RA, Dec, Label, N_visit
+        cur.execute('SELECT ID, Dec, RA, Label, N_visit, Last_visit FROM FieldsStatistics')
+        input1 = pd.DataFrame(cur.fetchall(), columns = ['ID', 'Dec', 'RA', 'Label', 'N_visit', 't_visit'])
+        self.n_fields = len(input1)
+        # create fields objects and feed their parameters and data
+        dtype = [('ID', np.int), ('Dec', np.float), ('RA', np.float), ('Label', np.str), ('N_visit', np.int), ('t_visit', np.float)]
+        fields_info  = np.zeros((self.n_fields,), dtype = dtype)
+
+        fields_info['ID']      = input1['ID']
+        fields_info['Dec']     = input1['Dec']
+        fields_info['RA']      = input1['RA']
+        fields_info['Label']   = input1['Label']
+        fields_info['N_visit'] = input1['N_visit']
+        fields_info['t_visit'] = input1['t_visit']
+        del input1
+
+        ''' import data for the  current night '''
+        cur.execute('SELECT ephemDate, altitude, hourangle, visible, covered, brightness FROM FieldData where nightid == {}'.format(night_id))
+        input2 = pd.DataFrame(cur.fetchall(), columns=['ephemDate', 'alts','hourangs', 'visible', 'covered', 'brightness'])
+
+        self.n_t_slots = (np.shape(input2)[0]) / self.n_fields
+        all_fields_all_moments = np.zeros((self.n_fields,self.n_t_slots,), dtype =  [('alts', np.float),
+                                                                                     ('hourangs', np.float),
+                                                                                     ('visible', np.bool),
+                                                                                     ('covered', np.bool),
+                                                                                     ('brightness', np.float)])
+
+        self.time_slots =  np.zeros(self.n_t_slots)
+        self.time_slots = input2['ephemDate'][0:self.n_t_slots]
+
+        for i in range(self.n_fields):
+            all_fields_all_moments[i, :]['alts']       = input2['alts'][i * self.n_t_slots : (i+1) * self.n_t_slots]
+            all_fields_all_moments[i, :]['hourangs']   = input2['hourangs'][i * self.n_t_slots : (i+1) * self.n_t_slots]
+            all_fields_all_moments[i, :]['visible']    = input2['visible'][i * self.n_t_slots : (i+1) * self.n_t_slots]
+            all_fields_all_moments[i, :]['covered']    = input2['covered'][i * self.n_t_slots : (i+1) * self.n_t_slots] #TODO covered and brighntess should be updatable
+            all_fields_all_moments[i, :]['brightness'] = input2['brightness'][i * self.n_t_slots : (i+1) * self.n_t_slots]
+        del input2
+
+
+        # adjusting t start and t end to where the data exist
+        self.t_start = self.time_slots[0]; self.t_end = self.time_slots[self.n_t_slots -1]
         # n_fields by n_fields symmetric matrix, slew time from field i to j
-        self.slew_t     = np.loadtxt("NightDataInLIS/Constants/slewMatrix.dat", unpack = True) * ephem.second
+        slew_t = np.loadtxt("NightDataInLIS/Constants/slewMatrix.dat") * ephem.second
 
-        self.n_all_fields = len(self.all_fields[0])
-        self.n_time_slots = len(self.time_slots)
-        self.t_start      = self.time_slots[0]
-        self.t_end        = self.time_slots[self.n_time_slots -1]
-        self.n_start      = find_n(self.t_start, self.t_start, self.t_end, self.n_time_slots, self.time_slots)
-
-        ''' Unpredictable data '''
-        self.sky_brightness = np.zeros(len(self.all_fields[0]), dtype= 'int')   #!!!!! temporarily!!!!!!!!    # current sky brightness
-        self.temp_coverage  = np.zeros(len(self.all_fields[0]), dtype= 'int')   #!!!!! temporarily!!!!!!!!    # temporary 0/1 coverage of the sky including clouds
-        # TODO Add update module for live sky brightness and temporary coverage updates
-        #print('\nData imported correctly') # data validity check should be added
-
-
-    def update_sky_brightness(self, sky_brightness):     # SkyB is a 1 by n_fields vector, reflects the sky brightness at each field
-        self.sky_brightness = sky_brightness            #must be fed into the algorithm in real time or as prediction in training
-
-    def update_temp_coverage(self, temp_coverage):   # SkyB is a 1 by n_fields vector, reflects the sky brightness at each field
-        self.temp_coverage = temp_coverage          #must be fed into the algorithm in real time or as prediction in training
+        ''' Model parameter and data'''
+        # model param
+        cur.execute('SELECT Value FROM ModelParam')
+        input3           = pd.DataFrame(cur.fetchall(), columns= ['ModelParam'])
+        self.inf         = input3['ModelParam'][0]
+        self.eps         = input3['ModelParam'][1]
+        self.t_expo      = input3['ModelParam'][2]
+        visit_w1         = input3['ModelParam'][3]; visit_w2 = input3['ModelParam'][4]
+        self.visit_w     = [visit_w1, visit_w2]
+        self.max_n_night = input3['ModelParam'][5]
+        self.t_interval  = input3['ModelParam'][6]
 
 
-class Scheduler(Data):
-    def __init__(self, date, site, f_weight, preferences, manual_init_state = 0, exposure_t = 30 * ephem.second, visit_window = [15*ephem.minute, 30*ephem.minute], max_n_ton_visits =3, micro_train = False):
-        super(Scheduler, self).__init__(date, site)
-
-        # create telescope
-        self.tonight_telescope = TelescopeState()
-        self.tonight_telescope.set_param(self.t_start, self.t_end)
-
-        # create fields objects and their parameters
         self.fields = []
-        for index, field in enumerate(np.transpose(self.all_fields)):
-            id   = field[0]
-            ra   = field[1]
-            dec  = field[2]
-            temp = FiledState(id, ra, dec)
-            t_rise = self.amass_cstr[0, index]
-            set_t  = self.amass_cstr[1, index]
-            temp.set_param(t_rise,
-                           set_t,
-                           self.all_n_tot_visits[index],
-                           self.coad_depth[index],
-                           self.vis_of_year[index],
-                           self.sci_prog[index],
-                           self.t_last_v_last[index])
+        for index, info in enumerate(fields_info):
+            temp = FiledState(info, self.t_start, self.time_slots, all_fields_all_moments[index,:], slew_t[index,:],input3)
             self.fields.append(temp)
 
-        # scheduler outputs
-        self.__NightOutput  = None
-        self.__NightSummary = None
+        del all_fields_all_moments
+        del slew_t
+        del input3
+        con.close()
+        # create episode
+        self.episode = EpisodeStatus(self.t_start, self.t_end, self.time_slots, self.t_expo)
+
+########################################################################################################################
+########################################################################################################################
+
+class Scheduler(DataFeed):
+    def __init__(self, date, site, f_weight):
+        super(Scheduler, self).__init__(date, site)
 
         # scheduler parameters
-        self.exposure_t = exposure_t
-        self.manual_init_state = manual_init_state
-        self.visit_window = visit_window
-        self.max_n_ton_visits = max_n_ton_visits
         self.f_weight     = f_weight
-        self.preferences  = preferences
+        self.next_field   = None
 
-        # timing
-        self.__t = None
-        self.__n = None
-        self.__step = None
+    def schedule(self):
+        self.episode.init_episode(self.fields)  # Initialize scheduling
+        self.episode.field.update_visit_var(self.t_start)
+        self.reset_output()
 
-        #other
-        self.init_id = None
+        while self.episode.t < self.episode.t_end:
+            all_costs = np.zeros(self.n_fields)
+            for index, field in enumerate(self.fields):
+                field.eval_feasibility()
+                all_costs[index] = field.eval_cost(self.f_weight)
+            winner_indx, min_cost = decision_maker(all_costs)
+            self.next_field = self.fields[winner_indx]
+            # update visit variables of the next field
+            t_visit = eval_t_visit(self.episode.t, self.next_field.slew_t_to)
+            self.next_field.update_visit_var(t_visit)
+            # record visit
+            self.record_visit()
 
-        # create trainer
-        self.trainer = Trainer()
-        self.micro_train = micro_train
+            '''prepare for the next visit'''
+            # update the episode status
+            dt = eval_dt(self.next_field.slew_t_to, self.t_expo)
+            self.episode.update_episode_var(dt, self.next_field, 'r')
+            # update all fields
+            self.episode.set_fields(self.fields, self.next_field)
+        self.wrap_up()
+
+    def reset_output(self):
+        self.output_dtype = [('Field_id', np.int),
+                             ('ephemDate', np.float),
+                             ('Filter', np.str),
+                             ('n_ton', np.int),
+                             ('n_last', np.int),
+                             ('Cost', np.float),
+                             ('Slew_t', np.float),
+                             ('t_since_v_ton', np.float),
+                             ('t_since_v_last', np.float),
+                             ('Alt', np.float),
+                             ('HA', np.float),
+                             ('t_to_invis', np.float),
+                             ('Sky_bri', np.float),
+                             ('Temp_coverage', np.int),
+                             ('F1', np.float),
+                             ('F2', np.float),
+                             ('F3', np.float),
+                             ('F4', np.float),
+                             ('F5', np.float),
+                             ('F6', np.float),
+                             ('F7', np.float)]
+
+        self.NightOutput  = np.zeros((0,), dtype =  self.output_dtype)
+
+        try:
+            os.remove("Output/log{}.lis".format(self.t_start))
+        except:
+            pass
+        self.op_log = open("Output/log{}.lis".format(self.t_start),"w")
+
+        #record the first entry
+        entry1 = record_assistant(self.episode.field, self.episode.t, self.episode.filter, self.output_dtype, first_entry=True)
+        self.NightOutput = np.append(self.NightOutput, entry1)
+        self.op_log.write(json.dumps(entry1.tolist())+"\n")
+
+    def record_visit(self):
+        entry = record_assistant(self.next_field, self.episode.t, self.episode.filter, self.output_dtype)
+        self.NightOutput = np.append(self.NightOutput, entry)
+        self.op_log.write(json.dumps(entry.tolist())+"\n")
+
+    def wrap_up(self):
+        np.save("Output/Schedule{}.npy".format(self.t_start), self.NightOutput)
 
     def set_f_wight(self, new_f_weight):
         self.f_weight = new_f_weight
-    def get_f_wight(self):
-        return self.f_weight
 
-    def schedule(self):
-        self.init_night()  #Initialize observation
-        while self.__t < self.t_end:
-            feasibility_idx = []
-            all_costs       = np.ones(self.n_all_fields) * inf
-            for field, index in zip(self.fields, range(self.n_all_fields)):
-                if  self.is_feasible(field): # update features of the feasible fields
-                    feasibility_idx.append(index)
-                    self.update_field(field)
-                    all_costs[index] = calculate_cost(field, self.tonight_telescope, self.f_weight)
-            next_field_index, self.minimum_cost = decision_fcn(all_costs, feasibility_idx)
-            self.next_field = self.fields[next_field_index]
-            dt = self.next_field.slew_t_to + self.exposure_t
-            if len(feasibility_idx) <= 10:
-                print(len(feasibility_idx))
-            self.clock(dt)
-            # update next field visit variables
-            self.next_field.update_visit_var(self.__t)
-            self.tonight_telescope.update(self.__t, self.__n, self.__step, self.next_field, 0) # TODO Filter change decision making procedure (maybe as second stage decision)
-            self.tonight_telescope.watch_fcn()
-            self.record_visit()
+    def eval_performance(self, preferences):
+        return eval_performance(self.NightOutput, preferences)
 
-            # update F_weights by feedback
-            if self.micro_train:
-                self.old_c_r = self.new_c_r
-                self.new_c_r = self.cum_reward()
-                reward = self.new_c_r - self.old_c_r - self.avg_rwd
-                if reward > 0:
-                    reward = 1
-                elif reward < 0:
-                    reward = -1
-                self.avg_rwd = (self.avg_rwd * (self.__step -1) + (reward)) / float(self.__step)
-                self.old_cost = self.new_cost
-                self.new_cost = self.minimum_cost
-                F_state= AllF[self.tonight_telescope.state.id -1]
-                f_weight_correction = self.trainer.micro_feedback(R = reward, av_R = self.avg_rwd, n_C = self.new_cost, o_C = self.old_cost, F = F_state)
-                self.set_f_wight(self.f_weight - f_weight_correction)
-                self.AllF_weight = np.vstack((self.AllF_weight, self.f_weight))
+########################################################################################################################
+########################################################################################################################
 
+class EpisodeStatus(object):
+    def __init__(self, t_start, t_end, time_slots, exposure_t):
+        # parameters constant during the current episode
+        self.t_start    = t_start
+        self.t_end      = t_end
+        self.episode_len= t_end - t_start # in days
+        self.time_slots = time_slots
+        self.n_t_slots  = len(time_slots)
+        self.exposure_t = exposure_t
+        self.moon_phase = (t_start - ephem.previous_new_moon(t_start))/30 # need to be changed
 
-        self.record_night()
+        # variables change after each decision
+        self.t          = None                 # current time
+        self.n          = None                # current time slot
+        self.step       = None                 # current decision number
+        self.epi_prog   = None                 # Episode progress
+        self.field      = None                 # current field
+        self.filter     = None
 
-    def update_field(self,field):
-        id = field.id
-        slew_t_to = self.calculate_f1(id)
-        ha    = self.calculate_f4(id)
-        t_to_invis = self.calculate_f6(field.set_t)
-        normalized_bri = self.calculate_f7(id)
-        cov = self.calculate_f10(id)
-        field.set_soft_var(slew_t_to, ha, t_to_invis, normalized_bri, cov)
+        # scheduler output
+        self.NightOutput  = None
 
+    def init_episode(self, fields):
+        self.reset_episode(fields)
+        self.set_fields(fields, self.field, initialization = True)
 
-    def clock(self, dt, reset = False):
+    def update_episode_var(self, dt, field, filter):
+        self.clock(dt)
+        self.field = field
+        self.filter= filter
+
+    def clock(self, dt, reset = False): # sets or resets t, n, step
         if reset:
-            self.__t = self.t_start + self.exposure_t
-            self.__step = 0
+            self.t = self.t_start + self.exposure_t
+            self.step = 0
         else:
-            self.__t += dt
-            self.__step += 1
-        self.__n = find_n(self.__t, self.t_start, self. t_end, self.n_time_slots, self.time_slots)
+            self.t += dt
+            self.step += 1
+        self.find_n()
 
-    def init_night(self):
-        # Reset Nights outputs
-        self.__NightOutput  = np.zeros((1200,), dtype = [('Field_id', np.int),
-                                                         ('ephemDate', np.float),
-                                                         ('Filter', np.int),
-                                                         ('n_ton', np.int),
-                                                         ('n_last', np.int),
-                                                         ('Cost', np.float),
-                                                         ('Slew_t', np.float),
-                                                         ('t_since_v_ton', np.float),
-                                                         ('t_since_v_last', np.float),
-                                                         ('Alt', np.float),
-                                                         ('HA', np.float),
-                                                         ('t_to_invis', np.float),
-                                                         ('Sky_bri', np.float),
-                                                         ('Temp_coverage', np.int)]) # at most 1200 visits per night
-        self.__NightSummary = np.zeros(3) # t_start and t_end for now
-        # Reset time
-        self.clock(0,True)
-        # Reset fields' state
-        self.reset_fields_state()
-        # Reset telescope
-        init_state = self.init_state(self.manual_init_state, False)
-        init_filter = self.init_filter()
-        init_state.update_visit_var(self.__t)
-        self.tonight_telescope.update(self.t_start, self.n_start, self.__step, init_state, init_filter)
-        self.minimum_cost = 0.
-        self.reset_feedback()
-        # Record initial condition
-        self.op_log = open("Output/log{}.lis".format(int(ephem.julian_date(self.Date))),"w")
-        self.record_visit()
-
-    def reset_fields_state(self):
-        for index, field in enumerate(self.fields):
-            alt = self.altitudes[0, index]
-            ha  = self.hour_angs[0, index]
-            cov = self.temp_coverage[index]
-            bri = self.sky_brightness[index]
-            t_last_visit = inf
-            t_last_v_last = self.t_last_v_last[index]
-            set_t         = self.amass_cstr[1, index]
-            t_to_invis = self.calculate_f6(set_t)
-            t_since_last_v_ton, t_since_last_v_last = self.calculate_f2(t_last_visit, t_last_v_last)
-            slew_t_to = 0
-            field.set_variables(alt, ha, cov, bri, t_to_invis, t_since_last_v_ton, t_since_last_v_last, slew_t_to)
-            field.set_visit_var(0, t_last_visit)
-
-    def init_state(self, state, manual = False):        # TODO Feasibility of the initial field needs to be checked
-        if manual:
-            self.init_id = state.id
-            return state
+    def find_n(self):
+        n = 0
+        if self.t <= self.t_start:
+            self.n = 0
+        elif self.t >= self.t_end:
+            self.n = self.n_t_slots -1
         else:
-            init_state = max(self.fields, key = attrgetter('alt'))
-            self.init_id = init_state.id
-            return init_state
+            while self.t > self.time_slots[n]:
+                n += 1
+            self.n = n
 
-    def init_filter(self):
-        return 0
+    def reset_episode(self, fields):
+        self.clock(0, reset = True)
+        self.filter= eval_init_filter()
+        self.field = eval_init_state(fields, 0)
 
-    def reset_feedback(self):
-        self.old_c_r = 0
-        self.new_c_r = 0
-        self.AllF_weight = self.f_weight
-        self.old_cost = 0
-        self.new_cost = 0
-        self.avg_rwd  = 0
-
-    # Feature calculation
-    def calculate_f1(self, id):     # slew time
-        return self.slew_t[int(id -1), int(self.tonight_telescope.state.id) -1]
-
-    def calculate_f2(self, t_last_v, t_last_v_last):# time since last visit
-        if t_last_v_last != inf:
-            t_since_last_v_last = self.__t - t_last_v_last
-        else:
-            t_since_last_v_last = inf
-        if t_last_v != inf:
-            t_since_last_v_ton = self.__t - t_last_v
-        else:
-            t_since_last_v_ton = inf
-        return t_since_last_v_ton, t_since_last_v_last
-
-    def calculate_f3(self, id):     # altitude
-        return self.altitudes[self.__n, int(id) -1]
-
-    def calculate_f4(self, id):     # hour angle
-        return self.hour_angs[self.__n, int(id) -1]
-
-    def calculate_f6(self, set_t):     # time to become effectively invisible- temporarily until setting below airmass horizon
-        if set_t == 0:
-            return inf
-        else:
-            return set_t - self.__t
-
-    def calculate_f7(self, id):     # normalized sky brightness
-        moon_size = 0.5 - np.abs(self.tonight_telescope.moon_phase - 0.5)
-        moon_sep = self.moon_sep[self.__n, int(id) -1] / np.pi
-        if moon_sep < 10 * np.pi/180:
-            return inf
-        if moon_size <0.2:
-            return np.exp(-10 * moon_sep)
-        elif moon_size < 0.5:
-            return np.exp(-2 * moon_sep)
-        elif moon_size < 0.8:
-            return np.exp(-1 * moon_sep)
-        else:
-            return 1 - 0.5 * moon_sep
-
-    def calculate_f8(self, id):     # visibility for rest of the year
-        return 0
-    def calculate_f9(self, id):     # science program identifier
-        return 0
-    def calculate_f10(self, id):    # 0/1 temporary coverage
-        return 0
+    def set_fields(self, fields, current_field, initialization = False):
+        #finding the index of current field
+        index = fields.index(current_field)
+        for field in fields:
+            field.update_field(self.n, self.t, index, initialization)
 
 
+########################################################################################################################
+########################################################################################################################
 
-    def is_feasible(self, any_next_state):
-        rise_t         = any_next_state.rise_t
-        n_ton_visits = any_next_state.n_ton_visits
-        t_last_v_last = any_next_state.t_last_v_last
-        t_last_visit  = any_next_state.t_last_visit
-        t_since_last_v_ton, t_since_last_v_last = self.calculate_f2(t_last_visit, t_last_v_last)
-        current_field  = self.tonight_telescope.state.id
-        id = any_next_state.id
-        alt            = self.calculate_f3(id)
-        slew_t         = self.calculate_f1(id)  #TODO change the slew_t and bri features from soft to hard variables
-        bri            = self.calculate_f7(id)
-        if rise_t != 0 and (any_next_state.rise_t > self.__t or any_next_state.set_t < self.__t):
-            return False
-        if rise_t == 0 and alt < np.pi/4:
-            return False
-        if t_since_last_v_ton != inf and (t_since_last_v_ton < self.visit_window[0] or t_since_last_v_ton > self.visit_window[1]):
-            return False
-        if n_ton_visits >= self.max_n_ton_visits:
-            return False
-        if current_field == any_next_state.id:
-            return False
-        if slew_t > 20 *ephem.second and t_since_last_v_ton != inf:
-            return False
-        if bri == inf:
-            return False
-        any_next_state.set_hard_var(t_since_last_v_ton, t_since_last_v_last, alt)
-        return True
+class FiledState(object): # an object of this class stores the information and status of a single field
+    def __init__(self, field_info, t_start, time_slots, all_moments_data, all_slew_to ,model_param):
+        # parameters (constant during the current episode)
+        # by input data
+        self.id       = field_info['ID']
+        self.dec      = field_info['Dec']
+        self.ra       = field_info['RA']
+        self.label    = field_info['Label']
 
-    def record_visit(self):
-        self.__NightOutput[self.__step]['Field_id'] = self.tonight_telescope.state.id
-        self.__NightOutput[self.__step]['ephemDate'] = self.__t
-        self.__NightOutput[self.__step]['Filter'] = self.tonight_telescope.the_filter
-        self.__NightOutput[self.__step]['n_ton'] = self.tonight_telescope.state.n_ton_visits
-        self.__NightOutput[self.__step]['n_last'] = self.tonight_telescope.state.n_tot_visits
-        self.__NightOutput[self.__step]['Cost'] = self.minimum_cost
-        self.__NightOutput[self.__step]['Slew_t'] = self.tonight_telescope.state.slew_t_to
-        self.__NightOutput[self.__step]['t_since_v_ton'] = self.tonight_telescope.state.t_since_last_v_ton
-        self.__NightOutput[self.__step]['t_since_v_last'] = self.tonight_telescope.state.t_since_last_v_last
-        self.__NightOutput[self.__step]['Alt'] = self.tonight_telescope.state.alt
-        self.__NightOutput[self.__step]['HA'] = self.tonight_telescope.state.ha
-        self.__NightOutput[self.__step]['t_to_invis'] = self.tonight_telescope.state.t_to_invis
-        self.__NightOutput[self.__step]['Sky_bri'] = self.tonight_telescope.state.normalized_bri
-        self.__NightOutput[self.__step]['Temp_coverage']= self.tonight_telescope.state.cov
-        self.op_log.write(json.dumps(self.__NightOutput[self.__step].tolist())+"\n")
+        self.N_visit  = field_info['N_visit'] # before the current episode of the scheduling
+        self.t_visit  = field_info['t_visit'] # before the current episode of the scheduling
+        #self.year_vis =                      # visibility of the year to be added
+        # by calculation
+        self.time_slots    = time_slots
+        self.since_t_visit = None
+        self.t_setting     = None
+        # parameters that based on the updates to prediction might need to be updated
+        #self.night_vis=                      # prediction for the visibility of the night to be added (with cloud model)
 
-    def record_night(self):
-        self.__NightSummary[0] = self.t_start
-        self.__NightSummary[1] = self.t_end
-        self.__NightSummary[2] = self.init_id
-        np.save("Output/Schedule{}.npy".format(int(ephem.julian_date(self.Date))), self.__NightOutput)
-        np.save("Output/Summary{}.npy".format(int(ephem.julian_date(self.Date))), self.__NightSummary)
-        np.save("Output/Watch{}.npy".format(int(ephem.julian_date(self.Date))), self.tonight_telescope.watch)
-
-    def performance(self):
-        duration = (self.t_end - self.t_start) /ephem.hour
-        # linear
-        cost_avg = np.average(self.__NightOutput[0:self.__step]['Alt'])
-        slew_avg = np.average(self.__NightOutput[0:self.__step]['Slew_t'])
-        alt_avg  = np.average(self.__NightOutput[0:self.__step]['Alt'])
-        # non-linear
-        u, c           = np.unique(self.__NightOutput['Field_id'], return_counts=True)
-        unique, counts = np.unique(c, return_counts=True)
-        try:
-            N_triple    = counts[unique == 3][0] / duration # per hour
-        except:
-            N_triple    = 0
-        try:
-            N_double    = counts[unique == 2][0] / duration
-        except:
-            N_double    = 0
-        try:
-            N_single    = counts[unique == 1][0] / duration
-        except:
-            N_single    = 0
-        # objective function
-        p = self.preferences[0] * cost_avg * -1 +\
-            self.preferences[1] * slew_avg * -1 +\
-            self.preferences[2] * alt_avg  *  1 +\
-            self.preferences[3] * N_triple *  1 +\
-            self.preferences[4] * N_double *  1 +\
-            self.preferences[5] * N_single * -1
-
-        return p
-
-    def cum_reward(self):
-
-        cost_sum = 0 #np.sum(self.__NightOutput[0:self.__step]['Alt'])
-        slew_sum = 0 #np.sum(self.__NightOutput[0:self.__step]['Slew_t'])
-        alt_sum  = 0 #np.sum(self.__NightOutput[0:self.__step]['Alt'])
-        # non-linear
-        u, c           = np.unique(self.__NightOutput['Field_id'], return_counts=True)
-        unique, counts = np.unique(c, return_counts=True)
-        try:
-            N_triple    = counts[unique == 3][0]
-        except:
-            N_triple    = 0
-        try:
-            N_double    = counts[unique == 2][0]
-        except:
-            N_double    = 0
-        try:
-            N_single    = counts[unique == 1][0]
-        except:
-            N_single    = 0
-
-        # cumulative reward
-        c_r =   self.preferences[0] * cost_sum * -1 +\
-                self.preferences[1] * slew_sum * -1 +\
-                self.preferences[2] * alt_sum  *  1 +\
-                self.preferences[3] * N_triple *  1 +\
-                self.preferences[4] * N_double *  1 +\
-                self.preferences[5] * N_single * -1
-
-        return c_r
-
-
-
-class TelescopeState(object):
-    def __init__(self):
-
-        # variables
-        self.t      = None                 # current time
-        self.n      = None                 # current time slot
-        self.__step = None                 # current decision number
-        self.state  = None                 # current field
-        self.the_filter = None
-
-
-        # parameters
-        self.t_start = None
-        self.t_end   = None
-
-        # Moon
-        self.moon_phase = None
-
-        # temporary
-        self.watch = np.zeros((1200,), dtype = [('Field_id', np.int),
-                                                ('ephemDate', np.float),
-                                                ('F1', np.float),
-                                                ('F2', np.float),
-                                                ('F3', np.float),
-                                                ('F4', np.float),
-                                                ('F5', np.float),
-                                                ('F6', np.float),
-                                                ('F7', np.float)]) # at most 1200 visits per night
-
-    def set_param(self, t_start, t_end):
-        self.t_start = t_start
-        self.t_end   = t_end
-        self.moon_phase = (t_start - ephem.previous_new_moon(t_start))/30
-
-    def set_t_n(self, t, n, step):
-        self.t    = t
-        self.n    = n
-        self.step = step
-
-    def set_state(self, state):
-        self.state = state
-
-    def set_filter(self,the_filter):
-        self.the_filter = the_filter
-
-    def update(self, t, n, step, state, the_filter):
-        self.set_t_n(t, n, step)
-        self.set_state(state)
-        self.set_filter(the_filter)
-
-    def watch_fcn(self, watch = True):
-        if not watch:
-            return
-        else:
-            F = AllF[int(self.state.id) -1]
-            self.watch[self.step]['Field_id']  = self.state.id
-            self.watch[self.step]['ephemDate'] = self.t
-            self.watch[self.step]['F1']        = F[0]
-            self.watch[self.step]['F2']        = F[1]
-            self.watch[self.step]['F3']        = F[2]
-            self.watch[self.step]['F4']        = F[3]
-            self.watch[self.step]['F5']        = F[4]
-            self.watch[self.step]['F6']        = F[5]
-            self.watch[self.step]['F7']        = F[6]
-            return
-
-
-
-class FiledState(object):
-    def __init__(self, **param):
-        # parameters (constant during the night)
-        self.id  = param.get('id')
-        self.dec = param.get('dec')
-        self.ra  = param.get('ra')
-        self.label = param.get('lbl')
-        self.rise_t = None
-        self.set_t  = None
-        self.n_tot_visits  = None # total number of visits before tonight
-        self.coadded_depth = None # coadded depth before tonight
-        self.vis_of_year   = None
-        self.sci_prog      = None
-        self.t_last_v_last = None
-
-        # variables (gets updated after each time step)
+        # variables (gets updated after each time step for all field)
+        # from input data
         self.slew_t_to           = None
-        self.t_since_last_v_ton  = None
-        self.t_since_last_v_last = None
         self.alt                 = None
         self.ha                  = None
+        self.visible             = None
+        self.brightness          = None
+        self.covered             = None
+        # by calculation
+        self.since_t_last_visit  = None
         self.t_to_invis          = None
-        self.normalized_bri      = None
-        self.cov                 = None
+        self.feasible            = None
+        self.cost                = None
 
-        # visit variables (gets updated only after a visit of )
-        self.n_ton_visits = None # total number of tonight's visits
-        self.t_last_visit = None # time of the last visit
+        # visit variables (gets updated only after a visit of the specific field)
+        # from input data
+        self.n_ton_visits = None # total number of visits in the current episode
+        self.t_last_visit = None # time of the last visit in the current episode
 
+        # data of the field for all moments of the current episode
+        self.all_moments_data = None
+        self.all_slew_to      = None
 
-    def set_param(self, rise_t, set_t, n_tot_visits, coad_depth, vis_of_year, sci_prog, t_last_v_last):
-        self.rise_t        = rise_t
-        self.set_t         = set_t
-        self.n_tot_visits  = n_tot_visits
-        self.coadded_depth = coad_depth
-        self.vis_of_year   = vis_of_year
-        self.sci_prog      = sci_prog
-        self.t_last_v_last = t_last_v_last
+        #Basis functions
+        self.F = None
 
-    def set_variables(self, alt, ha, cov, bri, t_to_invis, t_since_last_v_ton, t_since_last_v_last, slew_t_to):
+        self.data_feed(all_moments_data, all_slew_to, model_param)
+        self.cal_param(t_start, time_slots)
+
+    def update_field(self, n, t, current_state_index, initialization = False):
+        self.slew_t_to = self.all_slew_to[current_state_index]
+        self.alt       = self.all_moments_data[n]['alts']
+        self.ha        = self.all_moments_data[n]['hourangs']
+        self.visible   = self.all_moments_data[n]['visible']
+        self.brightness= self.all_moments_data[n]['brightness']
+        self.covered   = self.all_moments_data[n]['covered']
+        if initialization :
+            self.n_ton_visits = 0
+            self.t_last_visit = -self.inf
+        # must be executed after all the variables are updated
+        self.cal_variable(t)
+
+    def set_param(self, night_visibility):
+        self.night_vis = night_visibility
+
+    def set_variable(self, slew_t_to, alt, ha, bri, cov, t):
         self.slew_t_to = slew_t_to
-        self.alt = alt
-        self.ha = ha
-        self.t_to_invis = t_to_invis
-        self.normalized_bri = bri
-        self.cov = cov
-        self.t_since_last_v_ton = t_since_last_v_ton
-        self.t_since_last_v_last = t_since_last_v_last
+        self.alt       = alt
+        self.ha        = ha
+        self.brightness= bri
+        self.covered   = cov
+        self.cal_variable(t)
 
-    def set_visit_var(self, n_ton_visits, t_new_visit):
-        self.n_ton_visits = n_ton_visits
+    def update_visit_var(self, t_new_visit):
+        self.n_ton_visits += 1
         self.t_last_visit = t_new_visit
 
-    def update_visit_var(self,t_new_visit):
-        self.n_ton_visits = self.n_ton_visits +1
-        self.t_last_visit = t_new_visit
-
-    # variables can be group as updated before feasibility check(hard) of after(soft)
-    def set_hard_var(self, t_since_last_v, t_since_last_v_last, alt):
-        self.t_since_last_v_ton  = t_since_last_v
-        self.t_since_last_v_last = t_since_last_v_last
-        self.alt                 = alt
-
-    def set_soft_var(self, slew_t_to, ha, t_to_invis, normalized_bri, cov):
-        self.slew_t_to      = slew_t_to
-        self.ha             = ha
-        self.t_to_invis     = t_to_invis
-        self.normalized_bri = normalized_bri
-        self.cov            = cov
-
-
-
-
-# Basis function calculation
-
-def calculate_F1(slew_t_to):            # slew time cost 0~2
-    return (slew_t_to /ephem.second) /5
-
-def calculate_F2(t_since_last_v_ton, n_ton_visits, t_to_invis):   # night urgency -1~1
-    if t_since_last_v_ton == inf or n_ton_visits == 2:
-        return 5
-    elif n_ton_visits == 1:
-        if t_to_invis < 30 * ephem.minute:
-            return 0
+    def cal_param(self, t_start, time_slots):
+        if self.t_visit == -inf:
+            self.since_t_visit = inf
         else:
-            return 5 * (1 - np.exp(-1* t_since_last_v_ton / 20 * ephem.minute))
+            self.since_t_visit = t_start - self.t_visit
+        range = np.where(self.all_moments_data['visible'])
+        if (range[0].size):
+            index = range[0][-1]
+            self.t_setting = self.time_slots[index]
+        else:
+            self.t_setting = -self.inf
 
-def calculate_F3(t_since_last_v_last):  # overall urgency 0~1
-    if t_since_last_v_last == inf:
-        return 0
-    else:
-        return 1/t_since_last_v_last
-
-def calculate_F4(alt):                  # altitude cost 0~1
-    return 1 - (2/np.pi) * alt
-
-def calculate_F5(ha):                   # hour angle cost 0~1
-    return np.abs(ha)/12
-
-def calculate_F6(coadded_depth):        # coadded depth cost 0~1
-    return coadded_depth
-
-def calculate_F7(normalized_bri):       # normalized brightness 0~1
-    return normalized_bri
-
-# cost function
-
-def cost_fcn(weight, F):
-    return np.dot(weight, F)
+    def cal_variable(self, t):
+        if self.t_last_visit == -self.inf:
+            self.since_t_last_visit = self.inf
+        else:
+            self.since_t_last_visit = t - self.t_last_visit
+        if self.t_setting == -self.inf:
+            self.t_to_invis = -self.inf
+        else:
+            self.t_to_invis = self.t_setting - t
+            if self.t_to_invis < self.t_interval /2:
+                self.t_to_invis = 0
 
 
-def calculate_cost(possible_next_field, tonight_telescope, f_weight):
-    slew_t_to          = possible_next_field.slew_t_to
-    t_since_last_v_ton = possible_next_field.t_since_last_v_ton
-    t_since_last_v_last= possible_next_field.t_since_last_v_last
-    alt                = possible_next_field.alt
-    ha                 = possible_next_field.ha
-    n_ton_visits       = possible_next_field.n_ton_visits
-    t_to_invis         = possible_next_field.t_to_invis
-    coadded_depth      = possible_next_field.coadded_depth
-    normalized_bri     = possible_next_field.normalized_bri
-    F    = np.zeros(7)  # 7 is the number of basis functions
-    F[0] = calculate_F1(slew_t_to)
-    F[1] = calculate_F2(t_since_last_v_ton, n_ton_visits, t_to_invis)
-    F[2] = calculate_F3(t_since_last_v_last)
-    F[3] = calculate_F4(alt)
-    F[4] = calculate_F5(ha)
-    F[5] = calculate_F6(coadded_depth)
-    F[6] = calculate_F7(normalized_bri)
-    global AllF
-    AllF[int(possible_next_field.id) -1] = F
-    return cost_fcn(f_weight, F)
+
+    def data_feed(self, all_moments_data, all_slew_to, model_param):
+        self.all_moments_data = all_moments_data
+        self.all_slew_to     = all_slew_to
+        self.inf         = model_param['ModelParam'][0]
+        self.eps         = model_param['ModelParam'][1]
+        self.t_expo      = model_param['ModelParam'][2]
+        visit_w1         = model_param['ModelParam'][3]; visit_w2 = model_param['ModelParam'][4]
+        self.visit_w     = [visit_w1, visit_w2]
+        self.max_n_night = model_param['ModelParam'][5]
+        self.t_interval  = model_param['ModelParam'][6]
+
+    def eval_feasibility(self):
+        self.feasible = eval_feasibility(self)
+        return self.feasible
+
+    def eval_cost(self, f_weight):
+        if not self.feasible:
+            self.F = None
+            return self.inf
+        self.F = eval_basis_fcn(self)
+        self.cost = eval_cost(self.F, f_weight)
+        return self.cost
 
 
-def decision_fcn(all_costs, feasibility_idx):
-    cost_of_feasibles = [all_costs[i] for i in feasibility_idx]
-    index = np.argmin(cost_of_feasibles)
-    next_field_index = feasibility_idx[index]
-    minimum_cost  = cost_of_feasibles[index]
-    return next_field_index, minimum_cost
 
-    # feasibility check and update some of the features that are used to check feasibility
-
-
-# other functions
-def find_n(t, t_start, t_end, n_time_slots, time_slots):
-    n = 0
-    if t <= t_start:
-        return 0
-    if t >= t_end:
-        return  n_time_slots -1
-    while t > time_slots[n]:
-        n += 1
-    return n
-
-
+'''
 
 class Trainer(object):
         def micro_feedback(self, **options):
@@ -650,20 +390,21 @@ class Trainer(object):
 
 
 
-'''
+        self.altitudes  =  np.zeros([self.n_t_slots,self.n_fields])
+        self.hour_angs  =  np.zeros([self.n_t_slots,self.n_fields])
+        self.visible    =  np.zeros([self.n_t_slots,self.n_fields], dtype = bool)
+        self.covered    =  np.zeros([self.n_t_slots,self.n_fields], dtype = bool)
+        self.brightness =  np.zeros([self.n_t_slots,self.n_fields])
+        self.time_slots =  np.zeros(self.n_t_slots)
 
-Date            = ephem.Date('2016/09/01 12:00:00.00') # times are in UT
-Site            = ephem.Observer()
-Site.lon        = -1.2320792
-Site.lat        = -0.517781017
-Site.elevation  = 2650
-Site.pressure   = 0.
-Site.horizon    = 0.
 
-F_weight        = np.array([ 1, 1, 1, 1, 1, 1, 1])
-# create scheduler
-scheduler = Scheduler(Date, Site, F_weight)
+        for i in range(self.n_t_slots):
+            self.altitudes[i,] = input2[4][i * self.n_fields : (i+1) * self.n_fields]
+            self.hour_angs[i,] = input2[6][i * self.n_fields : (i+1) * self.n_fields]
+            self.visible[i,]   = input2[8][i * self.n_fields : (i+1) * self.n_fields]
+            self.covered[i,]   = input2[9][i * self.n_fields : (i+1) * self.n_fields] #TODO covered and brighntess should be updatable
+            self.brightness[i,]=input2[10][i * self.n_fields : (i+1) * self.n_fields]
+            self.time_slots[i] = input2[2][i]
+        del input2
 
-# schedule
-scheduler.schedule()
-'''
+        '''

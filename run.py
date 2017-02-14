@@ -2,12 +2,13 @@ __author__ = 'Elahe'
 
 import numpy as np
 import ephem
-import NightDataGenerator as DataGen
 import FBDE
 import time
-import DBreadwrite as DB
-import Graphics as GP
-import os
+import os.path
+
+#my modules
+import CreateDB
+
 
 
 
@@ -41,56 +42,27 @@ F_weight        = [ 1.29964032,  9.83017599,  5.21240644,  6.3694487,   0.158222
 # F6: co-added depth cost 0~1
 # F7: normalized brightness 0~1
 
-# immediate reward reward = F_weight[0] * F1 + F_weight[1] * F2 + F_weight[2] * F3 + F_weight[3] * F4 + F_weight[4] * F5 + F_weight[5] * F6 + F_weight[6] * F7
 s = time.time()
 
-n_nights = 3 # number of the nights to be scheduled starting from 1st Sep. 2016
+n_nights = 1 # number of the nights to be scheduled starting from 1st Sep. 2016
 
 
-# Delete previous database
-try:
-    os.remove('FBDE.db')
-except:
-    pass
 
-for i in range(1, n_nights+1):
-    Date = ephem.Date('2016/09/{} 12:00:00.00'.format(i)) # times are in UT
-    # Delete previous history dependent data
-    try:
-        os.remove('NightDataInLIS/t_last_visit{}.lis'.format(int(ephem.julian_date(Date))))
-        os.remove('NightDataInLIS/tot_N_visit{}.lis'.format(int(ephem.julian_date(Date))))
-    except:
-        pass
+Date_start = ephem.Date('2020/12/31 12:00:00.00') # times are in UT
 
-    # generate data of the night (both history dependent and independent)
-    DataGen.Night_data(Date,Site)
-    t1 = time.time()
-    print('\nData generated in {} sec'.format(t1 - s))
+
+for i in range(n_nights):
+    Date = Date_start + i # times are in UT
 
     # create scheduler
-    scheduler = FBDE.Scheduler(Date, Site, F_weight, preferences)
+    scheduler = FBDE.Scheduler(Date, Site, F_weight)
     t2 = time.time()
-    print('\nData imported in {} sec'.format(t2 - t1))
+    print('\nData imported in {} sec'.format(t2 - s))
 
     # schedule
     scheduler.schedule()
     t3 = time.time()
     print('\nScheduling finished in {} sec'.format(t3 - t2))
-
-    # write on DB
-    DB.DBreadNwrite('w', Date)
-    t4 = time.time()
-    print('\nWriting on DB finished in {} sec'.format(t4 - t3))
-
-    # graphics
-
-    # Animation specifications
-    FPS = 10            # Frame per second
-    Steps = 100          # Simulation steps
-    MP4_quality = 300   # MP4 size and quality
-
-    PlotID = 2        # 1 for one Plot, 2 for including covering pattern
-    GP.Visualize(Date, PlotID ,FPS, Steps, MP4_quality, 'Visualizations/LSST1plot{}.mp4'.format(int(ephem.julian_date(Date))), showClouds= False)
 
 print('\n \nTotal elapsed time: {} sec'.format(time.time() - s))
 
