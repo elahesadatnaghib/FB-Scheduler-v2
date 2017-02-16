@@ -1,0 +1,469 @@
+\documentclass[]{spie}  %>>> use for US letter paper
+%\documentclass[a4paper]{spie}  %>>> use this instead for A4 paper
+%\documentclass[nocompress]{spie}  %>>> to avoid compression of citations
+
+\renewcommand{\baselinestretch}{1.0} % Change to 1.65 for double spacing
+\let\proof\relax 
+\let\endproof\relax
+\usepackage{amsmath,amsfonts,amssymb,amsthm}
+\usepackage{graphicx}
+\usepackage[colorlinks=true, allcolors=blue]{hyperref}
+\usepackage{chngcntr}
+\usepackage{hyperref}
+\usepackage{courier}
+ 
+\counterwithin{figure}{section}
+\counterwithin{table}{section}
+
+\DeclareMathAlphabet{\pazocal}{OMS}{zplm}{m}{n}
+
+\newtheorem{prop}{Proposition}
+\theoremstyle{definition}
+\newtheorem*{defn*}{Definition}
+\newtheorem{defn}{Definition}
+
+\newcommand{\ax}{\vec{x}}
+
+
+\title{Python code description of the Feature Based Scheduler}
+
+\author[a]{Elahesadat Naghib}
+
+%\authorinfo{Further author information: (Send correspondence to E. N.)\\ E.N.: E-mail: enaghib@princeton.ed\\  R.J.V.: E-mail: rvdb@princeton.edu}
+
+% Option to view page numbers
+\pagestyle{plain} 
+ 
+\begin{document} 
+\maketitle
+
+%\begin{abstract}
+
+%Feature-based Scheduler offers a sequencing strategy for ground-based telescopes. This scheduler is designed in the framework of Markovian Decision Process (MDP), and consists of a sub-linear online controller, and an offline supervisory control-optimizer. Online control law is computed at the moment of decision for the next visit, and the supervisory optimizer trains the controller by simulation data. Choice of the Differential Evolution (DE) optimizer, and introducing a reduced state space of the telescope system, offer an efficient and parallelizable optimization algorithm. In this study, we applied the proposed scheduler to the problem of Large Synoptic Survey Telescope (LSST). Preliminary results for a simplified model of LSST is promising in terms of both optimality, and computational cost.
+
+%
+%\vspace{1cm}
+%\end{abstract}
+%
+%\keywords{Telescope scheduler, Observation scheduling, Observing strategy, LSST, Decision making, Evolutionary Algorithm, Optimal control, Optimization}
+
+
+\begin{center}
+\textbf{Key terms and notations}\
+\noindent\rule{\textwidth}{0.4pt}
+\end{center}
+\begin{tabular}{ l l  }
+$t$& GMT time in Julian Date,\\ %$2459215.5 \leq t \leq 2462867.5$ i.e. from January 1, 2021, to January 1, 2031\\
+$\tau_s(t)$& beginning of the night that $t$ lies in,\\
+$\tau_e(t)$& end of the night that $t$ lies in,\\
+$id(t)$& ID of the field that is visited at $t$, $id \in \{1,2,3,...,4206\},$\\
+$\theta_{l}(i,t)$& time of the last visit of field $i$ before $\tau_s(t)$, $\theta_{l}(i,t) = \infty$ if field $i$ is not visited before $\tau_s(t)$,\\
+$\theta_{l}^N(i,t)$& time of the last visit of field $i$ between $\tau_s(t)$ and $t$, $\theta_{l}^N(i,t) = \infty$ if field $i$ is not visited in this interval,\\
+$n(i,t)$ & number of the visits of field $i$ before $\tau_s(t)$\\
+$n^N(i,t)$ & number of the visits of field $i$ between $\tau_s(t)$ and $t$, $0 \leq n^N(i,t) \leq 3$\\
+$SM_{i,j}$& slew time from field $i$ to field $j$, $SM \in \mathbb{R}^{4206 \times 4206}$ is a given slew matrix,\\
+$alt(i,t)$ & altitude of the center of field $i$ at $t$, $-\frac{\pi}{2} \leq alt(i,t) \leq \frac{\pi}{2}$,\\
+$ha(i,t)$ & hour angle of the center of field $i$ at $t$, $-12 \leq ha(i,t) \leq 12$\\
+$\tau_{rise}(i,t)$ & rising time of field $i$ above the 1.4 airmass horizon at current night, $\tau_{rise}(i,t) = -\infty$ if $i$ never sets down,\\
+$\tau_{set}(i,t)$ & setting time of field $i$ below the 1.4 airmass horizon at current night, $\tau_{set}(i,t) = \infty$ if $i$ never sets down,\\
+$M_{\phi}(t)$ & percent of the Moon's surface illuminated at $t$,\\
+$M_{sep}(i,t)$ & Moon's separation from field $i$ at $t$, $0 \leq M_{sep}(i,t) \leq \pi$,\\
+$W_1,~W_2$ & given constant time window in which a revisit is valid, $0 < W_1 < W_2$\\
+$time slots$\\
+$visibility$\\
+$brightness$\\
+\end{tabular}\\
+\noindent\rule{\textwidth}{0.4pt}\\
+
+\section{FB scheduler code in Summary}\label{sec:intro}  
+Code repository on github: \href{https://github.com/elahesadatnaghib/LSSTschedulerV2} {FB Scheduler}
+
+\textbf{Main files}:
+\begin{itemize}
+\item \textbf{CreatDB.py}:  creates the database, tables, data structure, and feeds the model parameters into the database.
+\item \textbf{FieldDataGenerator.py}: evaluates  fields' predictable data such as altitude, at certain time intervals and writes them on the database. 
+\item \textbf{FBDE.py}: is where the heart of the scheduler is. it (1) reads the data in, stores the field data into field objects, (2) for each visit, loops over the field objects and (3) update the timing and the fields for the next visit decision.
+\item \textbf{UpdateDB.py}: reads the out put of FBDE.py (the visit sequence), (1) evaluates the statistics and history dependent variable required for the next episode scheduling and (2) writes them into the database 
+\end{itemize}
+
+\newpage
+\section{FB scheduler code in details}
+\vspace{1cm}
+
+Class DataFeed\\
+\indent connect to database \\
+\indent read in ID, RA, Dec, Science label, $\theta_{l}(i,t)$, and $n(i,t)$ of all fields\\
+\indent read in $alt(i,t)$, $ha(i,t)$, visibility, cloud coverage, and brightness of the fields for all time intervals\\
+\indent read in model parameters: $\infty$, $\epsilon$, Exposure time, $W_1,~W_2$, maximum number of visit per night\\
+\indent read in slew times from file\\
+\indent create and initialize field(\textit{FiledState}) objects, one object for each field\\
+\indent create episode(\textit{EpisodeStatus}) object, one object for one episode of scheduling (mostly a night)\\
+
+
+\noindent Class Scheduler(DataFeed)\\
+\indent scheduler\\
+\indent \indent initialize episode\\
+\indent \indent create output sequence structure\\
+\indent \indent $while~ t <$ end of the episode\\
+\indent \indent \indent $for$ all fields\\
+\indent \indent \indent \indent update field feasibility\\
+\indent \indent \indent \indent evaluate cost of feasible fields\\
+\indent \indent \indent make the decision of next visit based on the costs\\
+\indent \indent \indent simulate the visit \{evaluate the visit time, update the target field object\}\\
+\indent \indent \indent record visit in a text file and in the output array\\
+\indent \indent \indent update the episode \{update $t$, update current field, update current filter\}\\
+\indent \indent \indent update all fields variable\{$alt(i,t)$, $ha(i,t)$, visibility, cloud coverage, and brightness, $SM_{i,current field}$\}\\
+\indent \indent save the output array containing sequence of the visits for the episode\\
+
+
+\noindent Class EpisodeStatus\\
+\noindent \texttt{keeps track of the timing and other changing variables with time}\\
+\indent initial variables: \{$\tau_s(t)$, $\tau_e(t)$, time intervals where the fields data are calculated at\}\\
+\indent updatable variables: \{$t$, decision number, last visited field, current filter\}\\
+
+
+\noindent Class FieldState\\
+\noindent \texttt{keeps track of the state of each field}\\
+\indent initial variables for the $i^{th}$ object (a field): \{ID, RA, Dec, Science label, $\theta_{l}(i,t)$, and $n(i,t)$\}\\
+\indent data stored in the $i'th$ object (a field):\\
+\indent \{$alt(i,t)$, $ha(i,t)$, visibility, cloud coverage, and brightness, for all time slots, and $SM_{i, all other fields}$\}\\
+\indent updatable variables:\\
+\indent \{$alt(i,t)$, $ha(i,t)$, visibility, cloud coverage, and brightness, for the current time, $SM_{i,current field}$\}\\
+\indent updatable variables by calculation: \{time since last visit, time to become invisible, feasibility, cost\}
+
+
+\newpage
+\section{Run the scheduler}
+\vspace{1cm}
+
+\subsection{Required packages}
+Code is developed in Python2.7.10, and the following packages are required to be installed:
+
+\begin{itemize}
+\item PyEphem
+\item Numpy
+\item SQLite3
+\item JSON
+\item Pandas
+\item time
+\item Matplotlib
+\item ProgressBar
+\end{itemize}
+
+
+\subsection{Required data}
+Labeled field information: "/NightDataInLIS/Constants/fieldID.lis", can be downloaded \href{https://www.dropbox.com/s/0dfuuffx9aoyfix/fieldID.lis?dl=0}{here}\\
+Slew matrix: "/NightDataInLIS/Constants/slewMatrix.dat.lis", can be downloaded \href{https://www.dropbox.com/s/6gdyv4pofzb57vz/slewMatrix.dat?dl=0}{here}
+
+
+
+
+\subsection{Quick start with FB scheduler code}
+
+Scheduling of the LSST is a history dependent procedure, and the validity of the decisions in a certain night depends on the successful scheduling of all previous nights, evaluating the history dependent data (such as total number of visits), and storing them in the database.
+
+\begin{enumerate}
+\item \textbf{init\_setup.py} is a one-time procedure: creates a database in the main directory with field's data for 10 nights, starting from 2021/01/01, (takes around 3 minutes)
+\item \textbf{run.py}: schedules 10 nights starting from 2021/01/01. It also updates the database after each night of scheduling is completed. log and numpy output of individual nights will be store in "/Output" directory, and the mp4 output of each night will be stored in "/Visualizations" directory (all takes around 10 minutes).
+\end{enumerate}
+
+
+%
+%\begin{figure}
+%\centering
+%\includegraphics[width=0.8\textwidth, trim={5cm 0 0 0}, clip]{Figures/BldgBlock.pdf}
+%\label{fig_qud}\caption{ }
+%\end{figure}
+
+
+%
+%
+%This report reflects the details of Feature-based Telescope Scheduler's design. Including the features, basis functions, hard constraints, cost function, and the performance function as they are at the end of Oct. 2016. 
+%
+%In summary, there are seven features (\ref{sec_f}) for each field, with the total of 4206 fields that need to be evaluated at most at the end of each visit. Basis functions (\ref{sec_bf}) are designed to transform the raw features to decision criteria that are at the same time properly scaled and comparable to each other. There are seven Basis functions evaluated at the end of each visit for feasible fields upon which the decision is entirely based on. In other words, decision is independent of the time and the history of the observation, because all of the determining history dependent information is reflected in the Basis functions trough features. 
+%
+%Two candidates for cost function is proposed in \ref{sec_cf}, \textit{Linear Cost Function}, and \textit{Quadratic Cost Function}. The former cost function is what we used in the earlier versions of the scheduler, and the latter cost function is introduced for the first time in this report. In \ref{sec_comp} it is shown that the Quadratic Cost Function outperforms the Linear Cost Function (in the current setting of the scheduler). Performance Function (\ref{sec_perf}) that measures the quality of a sequence of visits reflects the performance of the scheduler after a night of telescope's operation with the scheduler. Current performance function is a scalar value evaluated by linear combination of six different criteria. Section \ref{sec_opt} explains the details of training procedure of the Cost Function's parameters for both Linear and Quadratic candidates. 
+%%Finally, this report is concluded with a list of next step's improvements and additions that are to be made to the Feature-based Scheduler.
+%
+%\begin{center}
+%\textbf{Key terms and notations}\
+%\noindent\rule{\textwidth}{0.4pt}
+%\end{center}
+%\begin{tabular}{ l l  }
+%$t$& GMT time in Julian Date,\\ %$2459215.5 \leq t \leq 2462867.5$ i.e. from January 1, 2021, to January 1, 2031\\
+%$\tau_s(t)$& beginning of the night that $t$ lies in,\\
+%$\tau_e(t)$& end of the night that $t$ lies in,\\
+%$id(t)$& ID of the field that is visited at $t$, $i \in \{1,2,3,...,4206\},$\\
+%$\theta_{l}(i,t)$& time of the last visit of field $i$ before $\tau_s(t)$, $\theta_{l}(i,t) = \infty$ if field $i$ is not visited before $\tau_s(t)$,\\
+%$\theta_{l}^N(i,t)$& time of the last visit of field $i$ between $\tau_s(t)$ and $t$, $\theta_{l}^N(i,t) = \infty$ if field $i$ is not visited in this interval,\\
+%$n^N(i,t)$ & number of the visits of field $i$ between $\tau_s(t)$ and $t$, $0 \leq n^N(i,t) \leq 3$\\
+%$SM_{i,j}$& slew time from field $i$ to field $j$, $SM \in \mathbb{R}^{4206 \times 4206}$ is a given slew matrix,\\
+%$alt(i,t)$ & altitude of the center of field $i$ at $t$, $-\frac{\pi}{2} \leq alt(i,t) \leq \frac{\pi}{2}$,\\
+%$ha(i,t)$ & hour angle of the center of field $i$ at $t$, $-12 \leq ha(i,t) \leq 12$\\
+%$cd(i,t)$ & co-added depth, measure of the cumulative information of collected from field $i$ in visits before $\tau_s(t)$,\\
+%$\tau_{rise}(i,t)$ & rising time of field $i$ above the 1.4 airmass horizon at current night, $\tau_{rise}(i,t) = -\infty$ if $i$ never sets down,\\
+%$\tau_{set}(i,t)$ & setting time of field $i$ below the 1.4 airmass horizon at current night, $\tau_{set}(i,t) = \infty$ if $i$ never sets down,\\
+%$M_{\phi}(t)$ & percent of the Moon's surface illuminated at $t$,\\
+%$M_{sep}(i,t)$ & Moon's separation from field $i$ at $t$, $0 \leq M_{sep}(i,t) \leq \pi$,\\
+%$W_1, W_2$ & given constant time window in which a revisit is valid, $0 < W_1 < W_2$\\
+%\end{tabular}\\
+%\noindent\rule{\textwidth}{0.4pt}\\
+%\newpage
+%\section{Features}\label{sec_f}
+%
+%\begin{itemize}
+%
+%\item Slew time from field $ID(t)$ to field $i = 1 \dots 4206$\\
+%\begin{center}
+%$f_1(i,t) := SM_{id(t), i}$
+%\end{center}
+%
+%\item $f_2(i,t)$ summarizes the history of visits of field $i$ into two elements, $f_2^1$, time past since the last visit before $\tau_s(t)$, and $f_2^2$, time past since the last visit after $\tau_s(t)$. The first element reflects the overall urgency of a visit for field $i$, and the second element need to be known to revisit a field in a valid window during a night. $f_2$ is a key feature in the sense that it detaches the decision of time $T$ from all $t < T$. However, the perfect decision requires a full information of the history, therefore the decision based on $f_2$ is only an approximation of the perfect decision. In other words, the original time dependent system is approximated by a Markovian system in which only the most important information of the history is taken into account. Of course, at any point that more details from history was critical for the decision, we have to extend the definition of $f_2$, that would, however, add a non-negligible computational cost to the training procedure.
+%
+%\begin{center}
+%$f_2(i,t) = (f_2^1(i,t), f_2^2(i,t)) := (t - \theta_l(i,t), t - \theta_l^N(i,t))$
+%\end{center}
+%\item Altitude of the field is a determining factor in the quality of the visit, therefore one of the features, $f_3$, is devoted to bring this information to the decision making procedure.
+%\begin{center}
+%$f_3(i,t) := alt(i,t)$
+%\end{center}
+%\item Although high altitudes are preferable for observation, but depend on the declination there is a threshold for each field's altitude. Therefore, what actually matters is whether a field is visited in the highest altitude it can ever reach. This information can be extracted from Hour Angle, $f_4$, of a field (that is preferred to be close to 0).
+%\begin{center}
+%$f_4(i,t) := ha(i,t)$ 
+%\end{center}
+%\item Co-added depth, $f_5$, offers feedback information to the decision making procedure. For each field, this feature measures the overall quality of the visits of field $i$, before $t$, that the overall urgency of visiting field $i$ at $t$ is depend upon. The fact that the co-added depth measure is a computationally expensive evaluation that involves heavy image processing, has a minimal negative effect on the scheduling performance. Because, the total number of visits of a given field is a lot more than 3 times (maximum number of visits at a single night), in addition, there is a separation of 2 to 3 nights between visits of a field that occurs at different nights, therefore, updates of the co-added depth values can be delayed by 2 to 3 days without a noticeable negative effect to the scheduling performance.
+%\begin{center}
+%$f_5(i,t) := cd(i,t)$ 
+%\end{center}
+%\item $f_6$ reflects the duration of future visibility of a field that determines its same night revisit urgency, and is defined to detached the decision of time $T$ from all $t >T$. 
+%\begin{center}
+%$f_6(i,t) := \begin{cases} \tau_{set}(i,t) - t,& \text{if } \tau_{rise}(i,t) < t \\ 0,  & \text{otherwise} \end{cases}$
+%\end{center}
+%
+%\item $f_7$ is the background sky brightness, which temporarily is defined by two important parameters that determine the sky brightness, the Moon phase and its separation from field $i$ at $t$.
+%\begin{center}
+%$f_7(i,t) := (f_7^1(t), f_7^2(i,t)) := (M_{\phi}(t), M_{sep}(i,t))$
+%\end{center}
+%\end{itemize}
+%
+%\section{Basis functions}\label{sec_bf}
+%Basis functions are mainly designed to scale the features and reflect their direct or inverse relation with the overall cost of a visit. There has been minimum effort put on crafting the basis functions. Of course an engineered design by experts would result in a more desirable model that offers a space of search for optimization algorithm which contains better optimums with higher probability. But in the current version of the scheduler, most of the efforts to find an optimum solution is assumed to be done by the optimization part rather than the design of hand crafted basis functions.
+%
+%\begin{itemize}
+%\item Scaled slew time from $ID(t)$ to $i$, it is scaled in a way that the most frequent values lie between about 3 to 5.
+%\begin{center}
+%$F_1(f_1(i,t)) = \frac{f_1(i,t)}{5 ~sec},$
+%\end{center}
+%\item $F_2$ is designed to reflect the urgency of the same night revisit of field $i$ at time $t$. The least urgent situation is when a field has never been visited ($n^N(i,t) = 0$), or it has already received its second visit ($n^N(i,t) = 2$), in this case, $F_2$ as an element of cost function, takes its maximum value. A moderately urgent case is when a field is visited only once and needs a second visit at the same night, but it will be visible for more than 30 minutes. Finally, the most urgent case is when a field is visited only once and it will be visible less than 30 minutes, in which $F_2$ takes its minimum value to pose the least contribution to the cost of visiting such field.
+%\begin{center}
+%$F_2(n^N(i,t), f_2^2(i,t), f_6(i,t)) = \begin{cases}  5 & \text{if } n^N(i,t) \in \{0,2\},\\ 5\times (1-\exp(-0.000694 f_2^2(i,t))) & \text{if } n^N(i,t) = 1 \text{ and } f_6(i,t) \geq 30~minutes,\\ 0& \text{if } n^N(i,t) = 1 \text{ and } f_6(i,t) < 30~minutes, \end{cases}$
+%\end{center}
+%\item $F_3$ reflects the overall urgency of visiting field $i$ at $t$, by simply reversing the time past from last visit of $i$ before $\tau_s(t)$. 
+%\begin{center}
+%$F_3(f_2^1(i,t)) = \frac{1}{f_2^1(i,t)},$
+%\end{center}
+%\item For $F_4$,  first the altitude $f_3$ is normalized between 0 to 1, then subtracted from 1 to reflect its relationship to the cost of the visit.
+%\begin{center}
+%$F_4(f_3(i,t)) = (1 - \frac{2 f_3(i,t)}{\pi}),$
+%\end{center}
+%\item To make sure that we wont undermine a field because of its declination that doesn't let it reach higher altitudes, $F_5$ is designed to assign a same cost to fields with the same separation from the meridian, hence from the highest altitude they can ever reach.
+%\begin{center}
+%$F_5(f_4(i,t)) = |\frac{ f_4(i,t)}{12}|,$
+%\end{center}
+%\item $F_6$ is the normalized co-added depth, $f_5$, that increasingly grow throughout the telescope's years of operation. 
+%\begin{center}
+%$F_6(f_5(i,t)) = \frac{f_5(i,t)}{\max\limits_i(f_5(i,t)) +1},$
+%\end{center}
+%\item $F_7$ is a normalized measure of brightness of the sky in the background of field $i$, at $t$. It is temporarily designed to adopt the Moon phase, $f_7^1$, and the Moon separation, $f_7^2$ to return a value between 0 to 1 as a measure of brightness.
+%\begin{center}
+%$F_7(f_7(i,t)) = \begin{cases} \exp(-\frac{10}{\pi} f_7^2(i,t)),  & \text{if }  0 \leq f_7^1(t) < 0.2 \\ \exp(-\frac{2}{\pi} f_7^2(i,t)),  & \text{if }  0.2 \leq f_7^1(t) < 0.5\\ \exp(-\frac{1}{\pi} f_7^2(i,t)),  & \text{if }  0.5 \leq f_7^1(t) < 0.8 \\ 1- \frac{f_7^2(i,t)}{2 \pi},  & \text{otherwise}\end{cases}$
+%\end{center}
+%\end{itemize}
+%
+%\section{Feasibility}\label{sec_feas}
+%
+%\begin{defn*} $\sigma_t \subset \{1,2,\dots, 4206\}$ is the set of all feasible fields at $t$. Field $i \in \sigma_t$ if and only if:
+%\begin{enumerate}
+%\item $ \tau_{rise}(i,t) \leq t \leq \tau_{set}(i,t) $ (field $i$ has to be above 1.4 airmass horizon at $t$)
+%\item $f_2^2(i,t) = -\infty$ ($i$ is not visited between $\tau_s(t)$ and $t$) or $W_1 \leq f_2^2(i,t) \leq W_2$ (time past since the last visit has to lie in the valid revisit window)
+%\item $n^N(i,t) \leq 2$ ($i$ is not visited more than twice between $\tau_s(t)$ and $t$)
+%\item  $f_1(i,t) \leq 20~sec$ (slew time from $ID(t)$ to $i$ is less than 20 seconds)
+%\item $M_{sep}(i,t) \geq 30~deg$ (field $i$ is at least 30 degrees separated from the Moon)
+%\end{enumerate}
+%\end{defn*}
+%
+%
+%\section{Cost function}\label{sec_cf}
+%
+%Linear Cost Function is a linear combination of the Basis Functions, with coefficients $c = [c_1,\dots, c_7]$ that are determined by the offline optimization algorithm.\\
+%
+%For the $j^th$ decision made at $t_j$:
+%\begin{center}$CF_l(j) = \sum\limits_{k=1}^7  c_k F_k(i,t_j),$\end{center}
+%
+%Quadratic Cost Function contains both linear terms and pairwise quadratic terms of the Basis Functions, with 56 coefficient. Considering the quadratic terms offers a more flexible structure that exploits possible correlation of the different Basis Functions which defines a larger space of search for best coefficients, hence possibly a better solution. On the other hand, this eight times larger search space requires more computational resources.
+%
+%For the $j^th$ decision made at $t_j$:
+%\begin{center} $CF_q(j) = \sum\limits_{k=1}^7  c_k F_k(i,t_j) + \sum\limits_{k=1}^m \sum\limits_{l=1}^m  d_{kl} F_k(i,t_j) F_l(i,t_j) ,$\end{center}
+%
+%Note that both functions are linear with respect to their free parameters.
+%
+%\section{Decision Function}\label{sec_df}
+%
+%For the $j^th$ decision made at $t_j$:\\
+%\begin{center}  $ID(t_j)= \text{argmin}_{\sigma_{t_j} }CF(j),$\end{center}
+%
+%
+%\section{Performance Function}\label{sec_perf}
+%
+%Current performance function is defined over a night of observation between $t_0 = 2457633.489641$ (2016/9/1 23:45:05 GMT), and $T = 2457633.892419$ (2016/9/2 09:25:05 GMT). Let $N_v$ be the number of visits between $t_0$ and $T$, then,
+%
+%\begin{center}
+%$P(t_0,T) = \frac{1}{N_v}( P_1 \sum\limits_{j = 1}^{N_v} CF(j) +P_2 \sum\limits_{j = 1}^{N_v} f_1(ID(t_j),t_j) +P_3 \sum\limits_{j = 1}^{N_v} f_3(ID(t_j),t_j)) + \frac{1}{T-t_0}(P_4N_{triple} + P_5 N_{double} + P_6 N_{single})$
+%\end{center}
+%
+%Where, $N_{triple}, N_{double}, \text{and } N_{single}$ are the number of fields visited three, two, and one time(s) respectively, between $t_0$ and $T$.
+%
+%For the current version of the training algorithm, preference parameters are set as follow:\\
+%
+%$P = [P_1,\dots,P_6] = [-1,-1,4,0,3,-10]$
+%
+%\section{Optimization}\label{sec_opt}
+%
+%Differential Evolution (DE) algorithm explores and exploits a finite space of solutions and returns the solution by which a scalar objective function is maximized amongst all visited points. DE never guarantees a 100\% global optimality. However increasing the number of trials and iterations increases confidence in the global optimality of the solution.
+%
+%To find the parameters of cost function, first we randomly initialize $N_p$ different sets of parameters. Then, let each of the settings run the LSST simulator, for a night of observation. Then we measure the scalar performance function $P(t_0,T)$. Based on the values of the parameters and objective function, DE, suggests a set of new $N_p$ controllers which on average work better than the previous controllers. Then iterates this procedure, until there is no improvement in the best observed performance. A pseudo code of the basic DE algorithm can be found in Appendix \ref{app_code}.
+%
+%To be able to compare the performance of Linear Cost Function versus Quadratic Cost Function, instead of terminating the training based on the performance function progress (that is not known until the end of the training), we limited the number of iterations to 20 (smaller than the expected number of iterations in the normal termination setting), with $N_p = 50$. This modification allocates a same computational budget for both cost functions. (Elapsed time: 12 hours, CPU 1.6 GHz Intel Core i5)
+%
+%Best solution found for Linear Cost Function:\\
+%\indent $c = [1.3, 9.8, 5.2, 6.4, 0.16, 7.11, 8.7]$
+%
+%Best solution found for Quadratic Cost Function:\\
+%\indent $c = ~[4.2,  ~~7.3,  ~~3.2, ~~ 7.4, ~~ 2.5,~~  2.3, ~~2.1]$\\
+%\indent $d = \begin{bmatrix}
+%0.61&   4.1& 1.9& 8.5& 4.7& 8.3&  4.7\\
+%2.8 &  6.6 &  3.9& 5.6& 4.0& 5.6&  4.0\\
+%7.9 & 8.0 &  2.0& 6.4 & 5.3& 5.4&  5.8\\
+%6.5& 5.8&6.8&   4.8& 4.8& 4.5&  1.4\\
+%6.7& 2.5&4.5& 5.3& 8.0&  4.6& 4.1\\
+%2.0&  4.6& 4.3& 3.6& 4.9&  5.9& 9.3\\
+%1.4& 9.2& 3.6&3.2&4.2&7.2& 6.2
+%\end{bmatrix}$
+%
+%
+%\section{Simulation results and comparison}\label{sec_comp}
+%
+%In this section four different simulations are presented: 
+%\begin{itemize}
+%\item $S_1:$ 100 days of scheduling with the Linear Cost Function starting from 2016/9/1
+%\item $S_2:$ 100 days of scheduling with the Quadratic Cost Function starting from 2016/9/1
+%\item $S_3:$ 365 days of scheduling with the Linear Cost Function starting from 2016/9/1
+%\item $S_1:$ 315 days of scheduling with the Quadratic Cost Function starting from 2016/9/1
+%\end{itemize}
+%
+%\subsection{Simulation timing}
+%A trained Feature-based scheduler contains four different phases:
+%
+%\begin{enumerate}
+%\item \textbf{Preprocessing and data generation} generates lookup tables for predictable data such as altitude to avoid evaluation of them in on-line scheduling. This phase also process the history of the observation and returns the summarized information that we use as a substitute for looking into the history. Time required for this phase is currently depend on the length of history, however it can be optimized to become independent of the size of past scheduling sequence, that would take up to 20 seconds for each individual night.
+%\item \textbf{Import data} is to read the data generated at the previous phase, and it takes about 13 seconds.
+%\item \textbf{Online scheduling} is the heart of the scheduler that makes the sequential decisions, and it takes about 70 seconds, but it is linearly dependent on the length of the night.
+%\item \textbf{Writing on the database} record the data into the database and it takes up to 2 seconds.
+%\end{enumerate}
+%
+%Timings are based on the simulation runs on a 1.6 GHz Intel Core i5 CPU with 4 GB 1600 MHz DDR3, which sums up to 105 seconds for each night of scheduling.
+%
+%Table \ref{tab_sim} demonstrates the most important statistics of the output of above-mentioned simulations. In terms of the number of visits Quadratic Cost function outperforms the Linear Cost Function with 0.4 visit per hour (1460 visit per year). Superiority of the Quadratic Cost Function is not noticeable in the average of visits altitude, however, comparing the average value with the best night and the worst night shows that it offers a more consistent performance over different nights compare to the Linear Cost Function.
+%
+%\begin{table}
+%\label{tab_sim}\caption{Simulation statistics}
+%\begin{tabular}{l c c | c c}
+%Simulation            & $S_1$ & $S_2$ & $S_3$ & $S_4$  \\
+%\hline
+%number of visits per hour      				& 103.74 & \textbf{104.16} & 103.71 & \textbf{104.17}  \\
+%ratio of the triple visits to total number of visits   & 0.29 & 0.25 & 0.29 & 0.25\\
+%ratio of the double visits to total number of visits &0.57 & \textbf{0.62} & 0.56 & \textbf{0.61}\\
+%ratio of the single visits to total number of visits  & 0.15 & \textbf{0.13} & 0.15 & \textbf{0.14}\\
+%\hline
+%average altitude of all visits (deg) 				 & 67.35&\textbf{67.86}&66.84&\textbf{67.40}\\
+%highest altitude average of a night of simulation &79.97&76.74&79.97&76.74\\
+%lowest altitude average of a night of simulation &59.97&61.69&58.64&59.49\\
+%average slew time of all visits (sec) 				 & \textbf{4.27}&4.58&4.73&\textbf{4.58}\\
+%lowest slew time average of a night of simulation &4.43&4.39&4.43&4.39\\
+%highest slew time average of a night of simulation &5.07&4.86&5.07&4.94\\
+%\hline
+%median number of visits of a field normalized by the simulation length 			& 0.29&0.31& 0.30&0.29\\
+%average number of visits of a field normalized by the simulation length 			&0.35&0.36&0.28&0.28\\
+%median of the time separation between $1^{st}$ and $2^{nd}$ visits& 16.17 & 15.71&16.20& 16.07\\
+%median of the time separation between $2^{nd}$ and $3^{rd}$ visits& 18.43 & 18.71&18.81& 18.80\\
+%\end{tabular}
+%\end{table}
+%%op:  with Linear Cost Function over 365 nights. bottom
+%
+%Figures \ref{fig_lin} and \ref{fig_qud}, show the visit statistics of Linear Cost Function and Quadratic Cost Function respectively. Histogram presents the distribution of the frequency of visits of a field which we ideally prefer to be as concentrated as possible (uniform coverage of the sky). The bottom bar graphs show the number of visits of each field, $i = 1\dots4206$, which we prefer to be as uniformly distributed as possible.
+% 
+%\begin{figure}\label{fig_lin}
+%\centering
+%\includegraphics[width=0.8\textwidth ]{Figures/Linear365.png}
+%\label{fig_lin}\caption{Linear Cost Function}
+%\end{figure}
+%
+%\begin{figure}
+%\centering
+%\includegraphics[width=0.8\textwidth]{Figures/Quad315.png}
+%\label{fig_qud}\caption{Quadratic Cost Function}
+%\end{figure}
+%
+%\newpage
+%\appendix
+%
+%\section{Basic Differential Evolution Algorithm}\label{app_code}
+%Notation:\\
+%$C{r}$: Crossover rate,\\
+%$F$: Mutation factor,\\
+%$N_p$: Population size,\\
+%$\ax^{L}$: Initialization lower bound, (not necessarily a lower bound on the solution.)\\
+%$\vec{\rho}\mid^{1}_{0}$: Uniformly random value between 0 and 1,\\
+%$\ax^{u}$: Initialization upper bound, (not necessarily an upper bound on the solution.)\\
+%$\ax_{i}^{(0)}$: Initial individuals,\\
+%
+%{\footnotesize
+%\hrule
+%\begin{tabbing}
+%\hspace{0.5cm} \= \hspace{0.5cm} \=  \hspace{0.5cm} \= \hspace{0.5cm} \=\\
+%\textbf{begin} \\
+%\> Initialize algorithm settings: $C{r}$, $F$\\
+%\> \textbf{for} ($i=1,\ldots,N_{p}$) \\
+%
+% \> \> $P^{(0)}\leftarrow \ax_{i}^{(0)}=\ax^{L}+\vec{\rho}\mid^{1}_{0}(\ax^{U}-\ax^{L})$~~\textbf{end} ~~\% \verb"Initialize" \\
+%
+%\> \textbf{while} (not optimal) \textbf{do begin} \\
+%
+% \>  \textbf{for} ($i=1,\ldots,N_{p}$) \textbf{do begin}~~\% \verb"Perform mutation" \\
+%
+% \> \> $\vec{u}_{i}^{k+1}\leftarrow$ \textbf{mutate} \\
+%
+% \> \>  \textbf{for} ($j=1,\ldots,N_{p}$) \textbf{do begin} ~~\% \verb"Crossover with target" \\
+%
+% \> \> \> \textbf{if} $\rho\mid_{0}^{1} < C{r}$ \textbf{do begin}\\
+%
+% \> \> \> \> $u_{ij}^{k+1} \leftarrow x_{ij}^{k}$~~\textbf{end} \\
+%
+% \> \> \textbf{end} \\
+%
+% \> \> $\ax_{i}^{k+1}\leftarrow$ \textbf{selection} $[\ax_{i}^{k},\vec{u}_{i}^{k+1}]$ ~~\% \verb"Perform selection" \\
+%
+% \> \textbf{end} \\
+%
+%$k \leftarrow k+1$ \\
+%\textbf{end}
+%\end{tabbing}
+%\hrule}
+%
+%
+
+\newpage
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+
+\end{document} 
