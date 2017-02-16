@@ -23,12 +23,12 @@ def eval_feasibility(field):
     elif field.n_ton_visits >= field.max_n_night:
         return False
     elif field.n_ton_visits == 1 and field.since_t_last_visit < field.visit_w[0]:
-        print(field.since_t_last_visit, field.visit_w[0])
         return False
     elif field.n_ton_visits == 1 and field.since_t_last_visit > field.visit_w[1]:
-        print(field.since_t_last_visit, field.visit_w[1])
         return False
     elif field.covered:
+        return False
+    if field.slew_t_to > 20 *ephem.second and field.since_t_last_visit != field.inf:
         return False
     return True
 

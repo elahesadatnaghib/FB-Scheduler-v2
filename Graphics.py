@@ -38,7 +38,7 @@ def AltAz2XY(Alt, Az) :
     return Y, -1*X
 
 
-def Visualize(Date, PlotID = 1,FPS = 15,Steps = 20,MP4_quality = 300, Name = "LSST Scheduler Simulator.mp4", showClouds = False):
+def visualize(Date, PlotID = 1,FPS = 15,Steps = 20,MP4_quality = 300, Name = "LSST Scheduler Simulator.mp4", showClouds = False):
 
     # Import data
     All_Fields = np.loadtxt("NightDataInLIS/Constants/UnlabelledFields.lis", unpack = True)
@@ -297,15 +297,3 @@ def Visualize(Date, PlotID = 1,FPS = 15,Steps = 20,MP4_quality = 300, Name = "LS
             '''
             #Save current frame
             writer.grab_frame()
-
-
-
-
-Date = ephem.Date('2020/12/31 12:00:00.00') # times are in UT
-# Animation specifications
-FPS = 10            # Frame per second
-Steps = 100          # Simulation steps
-MP4_quality = 300   # MP4 size and quality
-
-PlotID = 2        # 1 for one Plot, 2 for including covering pattern
-Visualize(Date, PlotID ,FPS, Steps, MP4_quality, 'Visualizations/LSST1plot{}.mp4'.format(int(ephem.julian_date(Date))), showClouds= False)

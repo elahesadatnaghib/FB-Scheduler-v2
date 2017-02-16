@@ -14,13 +14,13 @@ class DataFeed(object):
     def __init__(self, date, site, custom_episode = False):
         self.Site   = site
 
-        night_id = int(date - ephem.Date('2020/12/31 12:00:00.00')) + 1
+        self.night_id = int(date - ephem.Date('2020/12/31 12:00:00.00')) + 1
 
         # connecting to db
         con = lite.connect('FBDE.db')
         cur = con.cursor()
 
-        # fields data: ID, RA, Dec, Label, N_visit
+        # fields data: ID, RA, Dec, Label, N_visit, time of the last visit
         cur.execute('SELECT ID, Dec, RA, Label, N_visit, Last_visit FROM FieldsStatistics')
         input1 = pd.DataFrame(cur.fetchall(), columns = ['ID', 'Dec', 'RA', 'Label', 'N_visit', 't_visit'])
         self.n_fields = len(input1)
@@ -37,7 +37,7 @@ class DataFeed(object):
         del input1
 
         ''' import data for the  current night '''
-        cur.execute('SELECT ephemDate, altitude, hourangle, visible, covered, brightness FROM FieldData where nightid == {}'.format(night_id))
+        cur.execute('SELECT ephemDate, altitude, hourangle, visible, covered, brightness FROM FieldData where nightid == {}'.format(self.night_id))
         input2 = pd.DataFrame(cur.fetchall(), columns=['ephemDate', 'alts','hourangs', 'visible', 'covered', 'brightness'])
 
         self.n_t_slots = (np.shape(input2)[0]) / self.n_fields
@@ -152,10 +152,10 @@ class Scheduler(DataFeed):
         self.NightOutput  = np.zeros((0,), dtype =  self.output_dtype)
 
         try:
-            os.remove("Output/log{}.lis".format(self.t_start))
+            os.remove("Output/log{}.lis".format(self.night_id))
         except:
             pass
-        self.op_log = open("Output/log{}.lis".format(self.t_start),"w")
+        self.op_log = open("Output/log{}.lis".format(self.night_id),"w")
 
         #record the first entry
         entry1 = record_assistant(self.episode.field, self.episode.t, self.episode.filter, self.output_dtype, first_entry=True)
@@ -168,7 +168,7 @@ class Scheduler(DataFeed):
         self.op_log.write(json.dumps(entry.tolist())+"\n")
 
     def wrap_up(self):
-        np.save("Output/Schedule{}.npy".format(self.t_start), self.NightOutput)
+        np.save("Output/Schedule{}.npy".format(self.night_id), self.NightOutput)
 
     def set_f_wight(self, new_f_weight):
         self.f_weight = new_f_weight
@@ -198,8 +198,6 @@ class EpisodeStatus(object):
         self.field      = None                 # current field
         self.filter     = None
 
-        # scheduler output
-        self.NightOutput  = None
 
     def init_episode(self, fields):
         self.reset_episode(fields)
@@ -322,10 +320,11 @@ class FiledState(object): # an object of this class stores the information and s
         self.t_last_visit = t_new_visit
 
     def cal_param(self, t_start, time_slots):
-        if self.t_visit == -inf:
-            self.since_t_visit = inf
+        if self.t_visit == -self.inf:
+            self.since_t_visit = self.inf
         else:
             self.since_t_visit = t_start - self.t_visit
+
         range = np.where(self.all_moments_data['visible'])
         if (range[0].size):
             index = range[0][-1]
@@ -338,6 +337,7 @@ class FiledState(object): # an object of this class stores the information and s
             self.since_t_last_visit = self.inf
         else:
             self.since_t_last_visit = t - self.t_last_visit
+
         if self.t_setting == -self.inf:
             self.t_to_invis = -self.inf
         else:

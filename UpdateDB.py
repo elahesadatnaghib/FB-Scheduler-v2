@@ -5,7 +5,7 @@ import sqlite3 as lite
 import numpy as np
 import ephem
 
-def DBreadNwrite(Schedule):
+def update(Schedule):
 
     con = lite.connect('FBDE.db')
     cur = con.cursor()
@@ -86,10 +86,10 @@ def DBreadNwrite(Schedule):
         N_single    = 0
 
     N_per_hour  = N_visits * ephem.hour/ (t_end - t_start)
-    Avg_cost    = np.average(Schedule[0:N_visits]['Cost'])
-    Avg_slew_t  = np.average(Schedule[0:N_visits]['Slew_t'])
-    Avg_alt     = np.average(Schedule[0:N_visits]['Alt'])
-    Avg_ha      = np.average(Schedule[0:N_visits]['HA'])
+    Avg_cost    = np.average(Schedule['Cost'])
+    Avg_slew_t  = np.average(Schedule['Slew_t'])
+    Avg_alt     = np.average(Schedule['Alt'])
+    Avg_ha      = np.average(Schedule['HA'])
 
     cur.execute('INSERT INTO NightSummary VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
                     (Night_count, t_start, t_end,  Initial_field, N_visits, N_triple, N_double,
@@ -141,5 +141,3 @@ def DBreadNwrite(Schedule):
 
 
 
-Schedule = np.load("Output/Schedule{}.npy".format(44195.5556134))
-DBreadNwrite(Schedule)

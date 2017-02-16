@@ -21,7 +21,7 @@ def creatFBDE():
     cur = con.cursor()
 
     cur.execute('CREATE TABLE Schedule('
-                'Visit_count INTEGER, '
+                'Visit_count INTEGER PRIMARY KEY, '
                 'Field_id INTEGER, '
                 'ephemDate REAL, '
                 'Filter INTEGER, '
@@ -45,7 +45,7 @@ def creatFBDE():
                 'F7 REAL)')
 
     cur.execute('CREATE TABLE NightSummary('
-                'Night_count INTEGER, '
+                'Night_count INTEGER PRIMARY KEY, '
                 'T_start REAL, '
                 'T_end REAL, '
                 'Initial_field, '

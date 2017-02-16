@@ -7,7 +7,9 @@ import time
 import os.path
 
 #my modules
-import CreateDB
+from UpdateDB import update
+from Graphics import visualize
+
 
 
 
@@ -19,20 +21,9 @@ Site.elevation  = 2650
 Site.pressure   = 0.
 Site.horizon    = 0.
 
-preferences     = [1,1,4,0,3,5] # mission objective
-# objective function
-#objective = preferences[0] * average cost * -1 +
-#            preferences[1] * average slew time * -1 +
-#            preferences[2] * average altitude  *  1 +
-#            preferences[3] * No. of triple visits *  1 +
-#            preferences[4] * No. of double visits *  1 +
-#            preferences[5] * No. of single visits * -1
 
-#F_weight : controller parameters
-#F_weight        = np.array([ 1, 1, 1, 1, 1, 1, 1])  # all one
-#F_weight        = np.array([2, 1, 1, 5, 3, 1, 2])  # educated guess
-#F_weight        = np.array([ 2.90846782,  2.15963323,  9.48473502,  7.74506438,  4.69452669,  5.33303562, 9.55935917])    # learning result
-F_weight        = [ 1.29964032,  9.83017599,  5.21240644,  6.3694487,   0.15822261,  7.11310888, 8.74563025]               # learning result
+
+F_weight        = [ 1.29964032,  9.83017599,  0.21240644,  6.3694487,   0.15822261,  7.11310888, 8.74563025] # learning result
 
 # F1: slew time cost 0~2
 # F2: night urgency -1~1
@@ -42,27 +33,46 @@ F_weight        = [ 1.29964032,  9.83017599,  5.21240644,  6.3694487,   0.158222
 # F6: co-added depth cost 0~1
 # F7: normalized brightness 0~1
 
+
+
+n_nights = 10 # number of the nights to be scheduled starting from 1st Jan. 2021
+
 s = time.time()
 
-n_nights = 1 # number of the nights to be scheduled starting from 1st Sep. 2016
-
-
-
-Date_start = ephem.Date('2020/12/31 12:00:00.00') # times are in UT
+Date_start = ephem.Date(ephem.Date('2020/12/31 12:00:00.00')) # times are in UT
 
 
 for i in range(n_nights):
-    Date = Date_start + i # times are in UT
+    Date = ephem.Date(Date_start + i) # times are in UT
 
-    # create scheduler
+    # create scheduler and import data
+    t0 = time.time()
     scheduler = FBDE.Scheduler(Date, Site, F_weight)
-    t2 = time.time()
-    print('\nData imported in {} sec'.format(t2 - s))
+    t1 = time.time()
+    print('\nData of the {} imported in {} sec'.format(Date, t1 - t0))
 
     # schedule
     scheduler.schedule()
-    t3 = time.time()
-    print('\nScheduling finished in {} sec'.format(t3 - t2))
+    t2 = time.time()
+    print('\nScheduling of the {} finished in {} sec'.format(Date, t2 - t1))
 
-print('\n \nTotal elapsed time: {} sec'.format(time.time() - s))
+    # update the database
+    Schedule = np.load("Output/Schedule{}.npy".format(i + 1))
+    update(Schedule)
+    t3 = time.time()
+    print('\nDatabase for {} updated in {} sec'.format(Date, t3 - t2))
+
+    # create animation
+    FPS = 10            # Frame per second
+    Steps = 100          # Simulation steps
+    MP4_quality = 300   # MP4 size and quality
+
+    PlotID = 1        # 1 for one Plot, 2 for including covering pattern
+    visualize(Date, PlotID ,FPS, Steps, MP4_quality, 'Visualizations/LSST1plot{}.mp4'.format(i + 1), showClouds= False)
+    t4 = time.time()
+    print('\nVisualization for {} created in {} sec'.format(Date, t4 - t3))
+
+
+
+print('\n \nTotal elapsed time: {} minutes'.format((time.time() - s)/60))
 

@@ -25,6 +25,10 @@ def initial_setup(site, end_date):
 
 
 
+
+# execution
+s = time.time()
+
 Site            = ephem.Observer()
 Site.lon        = -1.2320792
 Site.lat        = -0.517781017
@@ -32,11 +36,14 @@ Site.elevation  = 2650
 Site.pressure   = 0.
 Site.horizon    = 0.
 
-end_date        = ephem.Date('2020/12/31 12:00:00.00') + 2
+#Number of the nights to generate the data for
+n_nights = 10
+
+end_date        = ephem.Date('2020/12/31 12:00:00.00') + n_nights
 
 initial_setup(Site, end_date)
 
-
+print('Total elapsed time: {} minutes'.format((time.time() - s)/60))
 
 
 

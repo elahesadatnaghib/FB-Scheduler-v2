@@ -149,18 +149,3 @@ def Field_data(site, end_d):
 
     con.commit()
 
-
-'''
-
-Site            = ephem.Observer()
-Site.lon        = -1.2320792
-Site.lat        = -0.517781017
-Site.elevation  = 2650
-Site.pressure   = 0.
-Site.horizon    = 0.
-
-end_date        = ephem.Date('2020/12/31 12:00:00.00') + 2
-
-Field_data(Site, end_date)
-
-'''
