@@ -28,7 +28,7 @@ def eval_feasibility(field):
         return False
     elif field.covered:
         return False
-    if field.slew_t_to > 10 *ephem.second and field.since_t_last_visit != field.inf:
+    if field.slew_t_to > 5 *ephem.second and field.since_t_last_visit != field.inf:
         return False
     return True
 
