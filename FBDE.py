@@ -21,11 +21,18 @@ class DataFeed(object):
         cur = con.cursor()
 
         # fields data: ID, RA, Dec, Label, N_visit, time of the last visit
-        cur.execute('SELECT ID, Dec, RA, Label, N_visit, Last_visit FROM FieldsStatistics')
-        input1 = pd.DataFrame(cur.fetchall(), columns = ['ID', 'Dec', 'RA', 'Label', 'N_visit', 't_visit'])
+        cur.execute('SELECT ID, Dec, RA, Label, N_visit, Last_visit, N_visit_u, Last_visit_u, N_visit_g, Last_visit_g, '
+                    'N_visit_r, Last_visit_r, N_visit_i, Last_visit_i, N_visit_z, Last_visit_z, N_visit_y, Last_visit_y FROM FieldsStatistics')
+        input1 = pd.DataFrame(cur.fetchall(), columns = ['ID', 'Dec', 'RA', 'Label', 'N_visit', 't_visit',
+                                                         'N_visit_u', 't_visit_u', 'N_visit_r', 't_visit_r',
+                                                         'N_visit_i', 't_visit_i', 'N_visit_g', 't_visit_g',
+                                                         'N_visit_z', 't_visit_z', 'N_visit_y', 't_visit_y'])
         self.n_fields = len(input1)
         # create fields objects and feed their parameters and data
-        dtype = [('ID', np.int), ('Dec', np.float), ('RA', np.float), ('Label', np.str), ('N_visit', np.int), ('t_visit', np.float)]
+        dtype = [('ID', np.int), ('Dec', np.float), ('RA', np.float), ('Label', np.str), ('N_visit', np.int), ('t_visit', np.float),
+                 ('N_visit_u', np.int), ('t_visit_u', np.float), ('N_visit_g', np.int), ('t_visit_g', np.float), ('N_visit_r', np.int),
+                 ('t_visit_r', np.float), ('N_visit_i', np.int), ('t_visit_i', np.float), ('N_visit_z', np.int), ('t_visit_z', np.float),
+                 ('N_visit_y', np.int), ('t_visit_y', np.float)]
         fields_info  = np.zeros((self.n_fields,), dtype = dtype)
 
         fields_info['ID']      = input1['ID']
@@ -34,6 +41,19 @@ class DataFeed(object):
         fields_info['Label']   = input1['Label']
         fields_info['N_visit'] = input1['N_visit']
         fields_info['t_visit'] = input1['t_visit']
+        fields_info['N_visit_u'] = input1['N_visit_u']
+        fields_info['t_visit_u'] = input1['t_visit_u']
+        fields_info['N_visit_g'] = input1['N_visit_g']
+        fields_info['t_visit_g'] = input1['t_visit_g']
+        fields_info['N_visit_r'] = input1['N_visit_r']
+        fields_info['t_visit_r'] = input1['t_visit_r']
+        fields_info['N_visit_i'] = input1['N_visit_i']
+        fields_info['t_visit_i'] = input1['t_visit_i']
+        fields_info['N_visit_z'] = input1['N_visit_z']
+        fields_info['t_visit_z'] = input1['t_visit_z']
+        fields_info['N_visit_y'] = input1['N_visit_y']
+        fields_info['t_visit_y'] = input1['t_visit_y']
+
         del input1
 
         ''' import data for the  current night '''
@@ -98,59 +118,46 @@ class Scheduler(DataFeed):
 
         # scheduler parameters
         self.f_weight     = f_weight
+        # scheduler decisions
         self.next_field   = None
+        self.next_filter  = None
+        self.filter_change= None
 
     def schedule(self):
         self.episode.init_episode(self.fields)  # Initialize scheduling
-        self.episode.field.update_visit_var(self.t_start)
+        self.episode.field.update_visit_var(self.t_start, self.episode.last_filter)
         self.reset_output()
 
         while self.episode.t < self.episode.t_end:
-            all_costs = np.zeros(self.n_fields)
+            all_costs = np.zeros((self.n_fields,), dtype = [('u', np.float),('r', np.float),('i', np.float),('g', np.float),('z', np.float),('y', np.float)])
             for index, field in enumerate(self.fields):
                 field.eval_feasibility()
                 all_costs[index] = field.eval_cost(self.f_weight)
-            winner_indx, min_cost = decision_maker(all_costs)
-            self.next_field = self.fields[winner_indx]
+            winner_indx, winner_cost, winner_filter = decision_maker(all_costs)
+
+            # decisions made for this visit
+            self.next_field    = self.fields[winner_indx]
+            self.filter_change = (self.next_filter != None and self.next_filter != winner_filter)
+            self.next_filter   = winner_filter
+
             # update visit variables of the next field
-            t_visit = eval_t_visit(self.episode.t, self.next_field.slew_t_to)
-            self.next_field.update_visit_var(t_visit)
+            t_visit = eval_t_visit(self.episode.t, self.next_field.slew_t_to, self.filter_change, 2 * ephem.minute)
+            self.next_field.update_visit_var(t_visit, self.next_filter)
             # record visit
             self.record_visit()
 
             '''prepare for the next visit'''
             # update the episode status
-            dt = eval_dt(self.next_field.slew_t_to, self.t_expo)
-            self.episode.update_episode_var(dt, self.next_field, 'r')
+            dt = eval_dt(self.next_field.slew_t_to, self.t_expo, self.filter_change, 2 * ephem.minute)
+            self.episode.update_episode_var(dt, self.next_field, winner_filter)
             # update all fields
             self.episode.set_fields(self.fields, self.next_field)
         self.wrap_up()
 
     def reset_output(self):
-        self.output_dtype = [('Field_id', np.int),
-                             ('ephemDate', np.float),
-                             ('Filter', np.str),
-                             ('n_ton', np.int),
-                             ('n_last', np.int),
-                             ('Cost', np.float),
-                             ('Slew_t', np.float),
-                             ('t_since_v_ton', np.float),
-                             ('t_since_v_last', np.float),
-                             ('Alt', np.float),
-                             ('HA', np.float),
-                             ('t_to_invis', np.float),
-                             ('Sky_bri', np.float),
-                             ('Temp_coverage', np.int),
-                             ('F1', np.float),
-                             ('F2', np.float),
-                             ('F3', np.float),
-                             ('F4', np.float),
-                             ('F5', np.float),
-                             ('F6', np.float),
-                             ('F7', np.float)]
+        self.output_dtype = format_output()
 
         self.NightOutput  = np.zeros((0,), dtype =  self.output_dtype)
-
         try:
             os.remove("Output/log{}.lis".format(self.night_id))
         except:
@@ -158,12 +165,12 @@ class Scheduler(DataFeed):
         self.op_log = open("Output/log{}.lis".format(self.night_id),"w")
 
         #record the first entry
-        entry1 = record_assistant(self.episode.field, self.episode.t, self.episode.filter, self.output_dtype, first_entry=True)
+        entry1 = record_assistant(self.episode.field, self.episode.t, self.episode.last_filter, self.output_dtype, first_entry=True)
         self.NightOutput = np.append(self.NightOutput, entry1)
         self.op_log.write(json.dumps(entry1.tolist())+"\n")
 
     def record_visit(self):
-        entry = record_assistant(self.next_field, self.episode.t, self.episode.filter, self.output_dtype)
+        entry = record_assistant(self.next_field, self.episode.t, self.episode.last_filter, self.output_dtype)
         self.NightOutput = np.append(self.NightOutput, entry)
         self.op_log.write(json.dumps(entry.tolist())+"\n")
 
@@ -192,21 +199,26 @@ class EpisodeStatus(object):
 
         # variables change after each decision
         self.t          = None                 # current time
-        self.n          = None                # current time slot
+        self.n          = None                 # current time slot
         self.step       = None                 # current decision number
         self.epi_prog   = None                 # Episode progress
         self.field      = None                 # current field
-        self.filter     = None
+
+        self.third_last_filter  = None
+        self.second_last_filter = None
+        self.last_filter        = None
+        self.n_f_change         = None                 # Number of filter change
 
 
     def init_episode(self, fields):
-        self.reset_episode(fields)
+        self.clock(0, reset = True)
+        self.set_filter(None, initialization = True)
         self.set_fields(fields, self.field, initialization = True)
 
     def update_episode_var(self, dt, field, filter):
         self.clock(dt)
         self.field = field
-        self.filter= filter
+        self.set_filter(filter)
 
     def clock(self, dt, reset = False): # sets or resets t, n, step
         if reset:
@@ -228,16 +240,30 @@ class EpisodeStatus(object):
                 n += 1
             self.n = n
 
-    def reset_episode(self, fields):
-        self.clock(0, reset = True)
-        self.filter= eval_init_filter()
-        self.field = eval_init_state(fields, 0)
 
     def set_fields(self, fields, current_field, initialization = False):
+        if initialization:
+            self.field    = eval_init_state(fields, 0)
+            current_field = self.field
         #finding the index of current field
         index = fields.index(current_field)
         for field in fields:
             field.update_field(self.n, self.t, index, initialization)
+
+    def set_filter(self, visit_filter, initialization = False):
+        if initialization:
+            self.third_last_filter  = None
+            self.second_last_filter = None
+            self.last_filter        = eval_init_filter()
+            self.n_f_change = 0
+        else:
+            if self.last_filter != visit_filter:
+                self.n_f_change += 1
+            self.third_last_filter  = self.second_last_filter
+            self.second_last_filter = self.last_filter
+            self.last_filter        = visit_filter
+
+
 
 
 ########################################################################################################################
@@ -252,8 +278,26 @@ class FiledState(object): # an object of this class stores the information and s
         self.ra       = field_info['RA']
         self.label    = field_info['Label']
 
-        self.N_visit  = field_info['N_visit'] # before the current episode of the scheduling
-        self.t_visit  = field_info['t_visit'] # before the current episode of the scheduling
+        self.filter_dtype_count = [('all', np.int),('u', np.int),('g', np.int),('r', np.int),('i', np.int),('z', np.int),('y', np.int)]
+        self.filter_dtype_value = [('all', np.float),('u', np.float),('g', np.float),('r', np.float),('i', np.float),('z', np.float),('y', np.float)]
+        self.N_visit    = np.zeros(1, self.filter_dtype_count)
+        self.t_visit    = np.zeros(1, self.filter_dtype_value)
+
+        self.N_visit['all']= field_info['N_visit'] # before the current episode of the scheduling
+        self.t_visit['all']= field_info['t_visit'] # before the current episode of the scheduling
+        self.N_visit['u']  = field_info['N_visit_u']
+        self.t_visit['u']  = field_info['t_visit_u']
+        self.N_visit['g']  = field_info['N_visit_g']
+        self.t_visit['g']  = field_info['t_visit_g']
+        self.N_visit['r']  = field_info['N_visit_r']
+        self.t_visit['r']  = field_info['t_visit_r']
+        self.N_visit['i']  = field_info['N_visit_i']
+        self.t_visit['i']  = field_info['t_visit_i']
+        self.N_visit['z']  = field_info['N_visit_z']
+        self.t_visit['z']  = field_info['t_visit_z']
+        self.N_visit['y']  = field_info['N_visit_y']
+        self.t_visit['y']  = field_info['t_visit_y']
+
         #self.year_vis =                      # visibility of the year to be added
         # by calculation
         self.time_slots    = time_slots
@@ -299,8 +343,10 @@ class FiledState(object): # an object of this class stores the information and s
         self.brightness= self.all_moments_data[n]['brightness']
         self.covered   = self.all_moments_data[n]['covered']
         if initialization :
-            self.n_ton_visits = 0
-            self.t_last_visit = -self.inf
+            self.n_ton_visits = np.zeros(1, self.filter_dtype_count)
+            self.t_last_visit = np.zeros(1,self.filter_dtype_value)
+            for index in range(7):
+                self.t_last_visit[0][index] = -self.inf
         # must be executed after all the variables are updated
         self.cal_variable(t)
 
@@ -315,28 +361,51 @@ class FiledState(object): # an object of this class stores the information and s
         self.covered   = cov
         self.cal_variable(t)
 
-    def update_visit_var(self, t_new_visit):
-        self.n_ton_visits += 1
-        self.t_last_visit = t_new_visit
+    def update_visit_var(self, t_new_visit, filter):
+        self.n_ton_visits[0]['all'] += 1
+        self.t_last_visit[0]['all'] = t_new_visit
+
+        if filter == 'u':
+            self.n_ton_visits[0]['u'] += 1
+            self.t_last_visit[0]['u'] = t_new_visit
+        if filter == 'r':
+            self.n_ton_visits[0]['r'] += 1
+            self.t_last_visit[0]['r'] = t_new_visit
+        if filter == 'i':
+            self.n_ton_visits[0]['i'] += 1
+            self.t_last_visit[0]['i'] = t_new_visit
+        if filter == 'g':
+            self.n_ton_visits[0]['g'] += 1
+            self.t_last_visit[0]['g'] = t_new_visit
+        if filter == 'z':
+            self.n_ton_visits[0]['z'] += 1
+            self.t_last_visit[0]['z'] = t_new_visit
+        if filter == 'y':
+            self.n_ton_visits[0]['y'] += 1
+            self.t_last_visit[0]['y'] = t_new_visit
 
     def cal_param(self, t_start, time_slots):
-        if self.t_visit == -self.inf:
-            self.since_t_visit = self.inf
-        else:
-            self.since_t_visit = t_start - self.t_visit
+        self.since_t_visit = np.zeros(1,self.filter_dtype_value)
+        for index in range(7):
+            if self.t_visit[0][index] == -self.inf:
+                self.since_t_visit[0][index] = self.inf
+            else:
+                self.since_t_visit[0][index] = t_start - self.t_visit[0][index]
 
-        range = np.where(self.all_moments_data['visible'])
-        if (range[0].size):
-            index = range[0][-1]
+        r = np.where(self.all_moments_data['visible'])
+        if (r[0].size):
+            index = r[0][-1]
             self.t_setting = self.time_slots[index]
         else:
             self.t_setting = -self.inf
 
     def cal_variable(self, t):
-        if self.t_last_visit == -self.inf:
-            self.since_t_last_visit = self.inf
-        else:
-            self.since_t_last_visit = t - self.t_last_visit
+        self.since_t_last_visit = np.zeros(1, self.filter_dtype_value)
+        for index in range(7):
+            if self.t_last_visit[0][index] == -self.inf:
+                self.since_t_last_visit[0][index] = self.inf
+            else:
+                self.since_t_last_visit[0][index] = t - self.t_last_visit[0][index]
 
         if self.t_setting == -self.inf:
             self.t_to_invis = -self.inf
@@ -365,46 +434,7 @@ class FiledState(object): # an object of this class stores the information and s
     def eval_cost(self, f_weight):
         if not self.feasible:
             self.F = None
-            return self.inf
+            return self.inf * np.ones((6,))
         self.F = eval_basis_fcn(self)
         self.cost = eval_cost(self.F, f_weight)
         return self.cost
-
-
-
-'''
-
-class Trainer(object):
-        def micro_feedback(self, **options):
-            old_cost   = options.get("o_C")
-            new_cost   = options.get("n_C")
-            reward    = options.get("R")
-            F      = options.get("F")
-            alpha  = 0.1
-            gamma  = 0.1
-            delta  = - old_cost - (reward - gamma * new_cost)
-            F_w_correction = alpha * delta * F
-
-            return F_w_correction
-
-
-
-
-        self.altitudes  =  np.zeros([self.n_t_slots,self.n_fields])
-        self.hour_angs  =  np.zeros([self.n_t_slots,self.n_fields])
-        self.visible    =  np.zeros([self.n_t_slots,self.n_fields], dtype = bool)
-        self.covered    =  np.zeros([self.n_t_slots,self.n_fields], dtype = bool)
-        self.brightness =  np.zeros([self.n_t_slots,self.n_fields])
-        self.time_slots =  np.zeros(self.n_t_slots)
-
-
-        for i in range(self.n_t_slots):
-            self.altitudes[i,] = input2[4][i * self.n_fields : (i+1) * self.n_fields]
-            self.hour_angs[i,] = input2[6][i * self.n_fields : (i+1) * self.n_fields]
-            self.visible[i,]   = input2[8][i * self.n_fields : (i+1) * self.n_fields]
-            self.covered[i,]   = input2[9][i * self.n_fields : (i+1) * self.n_fields] #TODO covered and brighntess should be updatable
-            self.brightness[i,]=input2[10][i * self.n_fields : (i+1) * self.n_fields]
-            self.time_slots[i] = input2[2][i]
-        del input2
-
-        '''

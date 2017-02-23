@@ -102,21 +102,75 @@ def update(Schedule):
         cur.execute('SELECT * FROM FieldsStatistics WHERE ID = ?',(id,))
         field_row = cur.fetchone()
 
-        previous_Third_last_visit  = field_row[4]
-        previous_Second_last_visit = field_row[5]
-        previous_Last_visit        = field_row[6]
-        previous_N_visit           = field_row[7]
-        previous_Coadded_depth     = field_row[8]
-        previous_Avg_cost          = field_row[9]
-        previous_Avg_slew_t        = field_row[10]
-        previous_Avg_alt           = field_row[11]
-        previous_Avg_ha            = field_row[12]
+        previous_Third_last_visit  = field_row[5]
+        previous_Second_last_visit = field_row[6]
+        previous_Last_visit        = field_row[7]
+        previous_N_visit           = field_row[8]
+        previous_Last_visit_u      = field_row[9]
+        previous_N_visit_u         = field_row[10]
+        previous_Last_visit_g      = field_row[11]
+        previous_N_visit_g         = field_row[12]
+        previous_Last_visit_r      = field_row[13]
+        previous_N_visit_r         = field_row[14]
+        previous_Last_visit_i      = field_row[15]
+        previous_N_visit_i         = field_row[16]
+        previous_Last_visit_z      = field_row[17]
+        previous_N_visit_z         = field_row[18]
+        previous_Last_visit_y      = field_row[19]
+        previous_N_visit_y         = field_row[20]
+        previous_Coadded_depth     = field_row[21]
+        previous_Avg_cost          = field_row[22]
+        previous_Avg_slew_t        = field_row[23]
+        previous_Avg_alt           = field_row[24]
+        previous_Avg_ha            = field_row[25]
 
         Fourth_last_visit = previous_Third_last_visit
         Third_last_visit  = previous_Second_last_visit
         Second_last_visit = previous_Last_visit
         Last_visit        = Schedule[index]['ephemDate']
         N_visit           = previous_N_visit + 1
+        if Schedule[index]['Filter'] == 'u':
+            Last_visit_u        = Schedule[index]['ephemDate']
+            N_visit_u           = previous_N_visit_u + 1
+        else:
+            Last_visit_u        = previous_Last_visit_u
+            N_visit_u           = previous_N_visit_u
+
+        if Schedule[index]['Filter'] == 'g':
+            Last_visit_g        = Schedule[index]['ephemDate']
+            N_visit_g           = previous_N_visit_g + 1
+        else:
+            Last_visit_g        = previous_Last_visit_g
+            N_visit_g           = previous_N_visit_g
+
+        if Schedule[index]['Filter'] == 'r':
+            Last_visit_r        = Schedule[index]['ephemDate']
+            N_visit_r           = previous_N_visit_r + 1
+        else:
+            Last_visit_r        = previous_Last_visit_r
+            N_visit_r           = previous_N_visit_r
+
+        if Schedule[index]['Filter'] == 'i':
+            Last_visit_i        = Schedule[index]['ephemDate']
+            N_visit_i           = previous_N_visit_i + 1
+        else:
+            Last_visit_i        = previous_Last_visit_i
+            N_visit_i           = previous_N_visit_i
+
+        if Schedule[index]['Filter'] == 'z':
+            Last_visit_z        = Schedule[index]['ephemDate']
+            N_visit_z           = previous_N_visit_z + 1
+        else:
+            Last_visit_z        = previous_Last_visit_z
+            N_visit_z           = previous_N_visit_z
+
+        if Schedule[index]['Filter'] == 'y':
+            Last_visit_y        = Schedule[index]['ephemDate']
+            N_visit_y           = previous_N_visit_y + 1
+        else:
+            Last_visit_y        = previous_Last_visit_y
+            N_visit_y           = previous_N_visit_y
+
         Coadded_depth     = previous_Coadded_depth + 0 # temporarily
         Avg_cost          = ((previous_Avg_cost * previous_N_visit) + Schedule[index]['Cost'])/N_visit
         Avg_slew_t        = ((previous_Avg_slew_t * previous_N_visit) + Schedule[index]['Slew_t'])/N_visit
@@ -129,12 +183,26 @@ def update(Schedule):
                         'Second_last_visit = ?, '
                         'Last_visit        = ?, '
                         'N_visit           = ?, '
+                        'Last_visit_u      = ?, '
+                        'N_visit_u         = ?, '
+                        'Last_visit_g      = ?, '
+                        'N_visit_g         = ?, '
+                        'Last_visit_r      = ?, '
+                        'N_visit_r         = ?, '
+                        'Last_visit_i      = ?, '
+                        'N_visit_i         = ?, '
+                        'Last_visit_z      = ?, '
+                        'N_visit_z         = ?, '
+                        'Last_visit_y      = ?, '
+                        'N_visit_y         = ?, '
                         'Coadded_depth     = ?, '
                         'Avg_cost          = ?, '
                         'Avg_slew_t        = ?, '
                         'Avg_alt           = ?, '
                         'Avg_ha            = ? WHERE ID = ?',
-                        (Fourth_last_visit, Third_last_visit, Second_last_visit, Last_visit, N_visit, Coadded_depth, Avg_cost, Avg_slew_t/ephem.second, Avg_alt, Avg_ha, id))
+                        (Fourth_last_visit, Third_last_visit, Second_last_visit, Last_visit, N_visit, Last_visit_u, N_visit_u,
+                         Last_visit_g, N_visit_g, Last_visit_r, N_visit_r, Last_visit_i, N_visit_i, Last_visit_z, N_visit_z,
+                         Last_visit_y, N_visit_y, Coadded_depth, Avg_cost, Avg_slew_t/ephem.second, Avg_alt, Avg_ha, id))
 
 
     con.commit()

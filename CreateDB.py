@@ -69,6 +69,18 @@ def creatFBDE():
                 'Second_last_visit REAL, '
                 'Last_visit REAL, '
                 'N_visit INTEGER, '
+                'Last_visit_u REAL, '
+                'N_visit_u INTEGER, '
+                'Last_visit_g REAL, '
+                'N_visit_g INTEGER, '
+                'Last_visit_r REAL, '
+                'N_visit_r INTEGER, '
+                'Last_visit_i REAL, '
+                'N_visit_i INTEGER, '
+                'Last_visit_z REAL, '
+                'N_visit_z INTEGER, '
+                'Last_visit_y REAL, '
+                'N_visit_y INTEGER, '
                 'Coadded_depth REAL, '
                 'Avg_cost REAL, '
                 'Avg_slew_t REAL, '
@@ -109,6 +121,18 @@ def creatFBDE():
         Second_last_visit = -inf
         Last_visit        = -inf
         N_visit           = 0
+        Last_visit_u        = -inf
+        N_visit_u           = 0
+        Last_visit_g        = -inf
+        N_visit_g           = 0
+        Last_visit_r        = -inf
+        N_visit_r           = 0
+        Last_visit_i        = -inf
+        N_visit_i           = 0
+        Last_visit_z        = -inf
+        N_visit_z           = 0
+        Last_visit_y        = -inf
+        N_visit_y           = 0
         Coadded_depth     = 0
         Avg_cost          = 0
         Avg_slew_t        = 0
@@ -116,9 +140,11 @@ def creatFBDE():
         Avg_ha            = 0
 
 
-        cur.execute('INSERT INTO FieldsStatistics VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
+        cur.execute('INSERT INTO FieldsStatistics VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
                                      (ID, RA, Dec, Label, Fourth_last_visit, Third_last_visit, Second_last_visit,
-                                      Last_visit, N_visit, Coadded_depth, Avg_cost, Avg_slew_t, Avg_alt, Avg_ha))
+                                      Last_visit, N_visit, Last_visit_u, N_visit_u, Last_visit_r, N_visit_r, Last_visit_i,
+                                      N_visit_i, Last_visit_g, N_visit_g, Last_visit_z, N_visit_z, Last_visit_y, N_visit_y,
+                                      Coadded_depth, Avg_cost, Avg_slew_t, Avg_alt, Avg_ha))
 
 
     param_list = [('inf', inf),
