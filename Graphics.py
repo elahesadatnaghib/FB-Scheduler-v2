@@ -80,12 +80,17 @@ def visualize(Date, PlotID = 1,FPS = 15,Steps = 20,MP4_quality = 300, Name = "LS
         ax = plt.subplot(211, axisbg = 'black')
 
     unobserved, Observed_lastN, Obseved_toN,\
-    ToN_History_line, last_10_History_line,\
+    ToN_History_line,\
+    uu,gg,rr,ii,zz,yy,\
+    last_10_History_line,\
     Horizon, airmass_horizon, S_Pole,\
     LSST,\
     Clouds\
         = ax.plot([], [], '*',[], [], '*',[], [], '*',
-                  [], [], '-',[], [], '*',
+                  [], [], '*',
+                  [], [], '*',[], [], '*',[], [], '*',
+                  [], [], '*',[], [], '*',[], [], '*',
+                  [], [], '-',
                   [], [], '-',[], [], '-',[], [], 'D',
                   [], [], 'o',
                   [], [], 'o')
@@ -103,11 +108,15 @@ def visualize(Date, PlotID = 1,FPS = 15,Steps = 20,MP4_quality = 300, Name = "LS
 
     unobserved.set_color('dimgray');        unobserved.set_markersize(star_size)
     Observed_lastN.set_color('blue');       Observed_lastN.set_markersize(star_size)
-    Obseved_toN.set_color('chartreuse');    Obseved_toN.set_markersize(star_size +2)
+    Obseved_toN.set_color('chartreuse');    Obseved_toN.set_markersize(0)
+
+    uu.set_color('purple'); gg.set_color('green'); rr.set_color('red')
+    ii.set_color('orange'); zz.set_color('pink');   yy.set_color('deeppink')
+
     Clouds.set_color('white');              Clouds.set_markersize(10)
 
     ToN_History_line.set_color('orange');   ToN_History_line.set_lw(.5)
-    last_10_History_line.set_color('red');  last_10_History_line.set_lw(.5)
+    last_10_History_line.set_color('gray');  last_10_History_line.set_lw(.5)
 
     LSST.set_color('red'); LSST.set_markersize(8)
 
@@ -171,13 +180,14 @@ def visualize(Date, PlotID = 1,FPS = 15,Steps = 20,MP4_quality = 300, Name = "LS
         F1 = []
 
     # Tonight observation path
-    cur.execute('SELECT Field_id, ephemDate FROM Schedule WHERE ephemDate BETWEEN (?) AND (?)',(toN_start, toN_end))
+    cur.execute('SELECT Field_id, ephemDate, filter FROM Schedule WHERE ephemDate BETWEEN (?) AND (?)',(toN_start, toN_end))
     row = cur.fetchall()
     if row[0][0] is not None:
         F2 = [x[0] for x in row]
         F2_timing = [x[1] for x in row]
+        F2_filtering = [x[2] for x in row]
     else:
-        F2 = []; F2_timing = []
+        F2 = []; F2_timing = []; F2_filtering = []
 
     # Sky elements
     Moon = Circle((0, 0), 0, color = 'silver', zorder = 3)
@@ -200,10 +210,14 @@ def visualize(Date, PlotID = 1,FPS = 15,Steps = 20,MP4_quality = 300, Name = "LS
 
             visit_index = 0
             visited_field = 0
+            visit_index_u = 0; visit_index_g = 0; visit_index_r = 0; visit_index_i = 0; visit_index_z = 0; visit_index_y = 0
+            visit_filter  = 'r'
 
 
             # Object fields: F1)Observed last night F2)Observed tonight F3)Unobserved F4)Covered by clouds
             F1_X = []; F1_Y = []; F2_X = []; F2_Y = []; F3_X = []; F3_Y = []; F4_X = []; F4_Y = []
+            # Filter coloring for tonight observation
+            U_X = []; U_Y = []; G_X = []; G_Y = []; R_X = []; R_Y = []; I_X = []; I_Y = []; Z_X = []; Z_Y = []; Y_X = []; Y_Y = []
 
             # F1  coordinate:
             for i in F1:
@@ -213,14 +227,40 @@ def visualize(Date, PlotID = 1,FPS = 15,Steps = 20,MP4_quality = 300, Name = "LS
                     F1_X.append(X); F1_Y.append(Y)
 
             # F2  coordinate:
-            for i,tau in zip(F2,F2_timing):
+            for i,tau,filter in zip(F2, F2_timing, F2_filtering):
                 Alt, Az = Fields_local_coordinate(All_Fields[1,i-1], All_Fields[2,i-1], t, Site)
                 if Alt > 0:
                     X, Y    = AltAz2XY(Alt,Az)
                     F2_X.append(X); F2_Y.append(Y)
+                    if filter == 'u':
+                        U_X.append(X); U_Y.append(Y)
+                        if t >= tau:
+                            visit_index_u = len(U_X) -1
+                    if filter == 'g':
+                        G_X.append(X); G_Y.append(Y)
+                        if t >= tau:
+                            visit_index_g = len(G_Y) -1
+                    if filter == 'r':
+                        R_X.append(X); R_Y.append(Y)
+                        if t >= tau:
+                            visit_index_r = len(R_Y) -1
+                    if filter == 'i':
+                        I_X.append(X); I_Y.append(Y)
+                        if t >= tau:
+                            visit_index_i = len(I_Y) -1
+                    if filter == 'z':
+                        Z_X.append(X); Z_Y.append(Y)
+                        if t >= tau:
+                            visit_index_z = len(Z_Y) -1
+                    if filter == 'y':
+                        Y_X.append(X); Y_Y.append(Y)
+                        if t >= tau:
+                            visit_index_y = len(Y_Y) -1
+
                     if t >= tau:
                         visit_index = len(F2_X) -1
                         visited_field = i
+                        visit_filter  = filter
 
 
             # F3  coordinate:
@@ -241,16 +281,32 @@ def visualize(Date, PlotID = 1,FPS = 15,Steps = 20,MP4_quality = 300, Name = "LS
                         F4_X.append(X); F4_Y.append(Y)
 
 
-
-
             # Update plot
             unobserved.set_data([F3_X,F3_Y])
             Observed_lastN.set_data([F1_X,F1_Y])
             Obseved_toN.set_data([F2_X[0:visit_index],F2_Y[0:visit_index]])
 
+            uu.set_data([U_X[0:visit_index_u],U_Y[0:visit_index_u]]); gg.set_data([G_X[0:visit_index_g],G_Y[0:visit_index_g]])
+            rr.set_data([R_X[0:visit_index_r],R_Y[0:visit_index_r]]); ii.set_data([I_X[0:visit_index_i],I_Y[0:visit_index_i]])
+            zz.set_data([Z_X[0:visit_index_z],Z_Y[0:visit_index_z]]); yy.set_data([Y_X[0:visit_index_y],Y_Y[0:visit_index_y]])
+
             ToN_History_line.set_data([F2_X[0:visit_index], F2_Y[0:visit_index]])
             last_10_History_line.set_data([F2_X[visit_index - 10: visit_index], F2_Y[visit_index - 10: visit_index]])
+            # telescope position and color
             LSST.set_data([F2_X[visit_index],F2_Y[visit_index]])
+            if visit_filter == 'u':
+                LSST.set_color('purple')
+            if visit_filter == 'g':
+                LSST.set_color('green')
+            if visit_filter == 'r':
+                LSST.set_color('red')
+            if visit_filter == 'i':
+                LSST.set_color('orange')
+            if visit_filter == 'z':
+                LSST.set_color('pink')
+            if visit_filter == 'y':
+                LSST.set_color('deeppink')
+
             Clouds.set_data([F4_X,F4_Y])
 
 
@@ -297,3 +353,30 @@ def visualize(Date, PlotID = 1,FPS = 15,Steps = 20,MP4_quality = 300, Name = "LS
             '''
             #Save current frame
             writer.grab_frame()
+
+
+'''
+
+Site            = ephem.Observer()
+Site.lon        = -1.2320792
+Site.lat        = -0.517781017
+Site.elevation  = 2650
+Site.pressure   = 0.
+Site.horizon    = 0.
+
+n_nights = 3 # number of the nights to be scheduled starting from 1st Jan. 2021
+
+Date_start = ephem.Date(ephem.Date('2020/12/31 12:00:00.00')) # times are in UT
+
+for i in range(n_nights):
+    Date = ephem.Date(Date_start + i) # times are in UT
+
+    # create animation
+    FPS = 10            # Frame per second
+    Steps = 100          # Simulation steps
+    MP4_quality = 300   # MP4 size and quality
+
+    PlotID = 1        # 1 for one Plot, 2 for including covering pattern
+    visualize(Date, PlotID ,FPS, Steps, MP4_quality, 'Visualizations/LSST1plot{}.mp4'.format(i + 1), showClouds= False)
+
+'''
