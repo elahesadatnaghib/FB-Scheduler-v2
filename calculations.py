@@ -15,16 +15,18 @@ def eval_init_state(fields, suggestion, manual = False):        # TODO Feasibili
         return fields[winner_index]
 
 def eval_init_filter():
-    return 'r'
+    return 'u'
 
 def eval_feasibility(field):
     if not field.visible:
         return False
     elif field.n_ton_visits[0]['all'] >= field.max_n_night:
         return False
-    elif field.n_ton_visits[0]['all'] == 1 and field.since_t_last_visit[0]['all'] < field.visit_w[0]:
+    #elif field.n_ton_visits[0]['all'] == 1 and field.since_t_last_visit[0]['all'] < field.visit_w[0]:
+    elif field.n_ton_visits[0]['all'] != 0 and field.since_t_last_visit[0]['all'] < field.visit_w[0]:
         return False
-    elif field.n_ton_visits[0]['all'] == 1 and field.since_t_last_visit[0]['all'] > field.visit_w[1]:
+    #elif field.n_ton_visits[0]['all'] == 1 and field.since_t_last_visit[0]['all'] > field.visit_w[1]:
+    elif field.n_ton_visits[0]['all'] != 0 and field.since_t_last_visit[0]['all'] > field.visit_w[1]:
         return False
     elif field.covered:
         return False
@@ -32,16 +34,16 @@ def eval_feasibility(field):
         return False
     return True
 
-def eval_basis_fcn(field):
+def eval_basis_fcn(field, curr_filter):
     F    = np.zeros(7, dtype = [('u', np.float),('r', np.float),('i', np.float),('g', np.float),('z', np.float),('y', np.float)])  # 7 is the number of basis functions
     for index in F.dtype.names:
-        F[0][index] = calculate_F1(field.slew_t_to)
+        F[0][index] = calculate_F1(field.slew_t_to, index, curr_filter)
         F[1][index] = calculate_F2(field.since_t_last_visit[0][index], field.n_ton_visits[0][index], field.t_to_invis, field.inf)
         F[2][index] = calculate_F3(field.since_t_visit[0][index], field.inf)
-        F[3][index] = calculate_F4(field.alt)
-        F[4][index] = calculate_F5(field.ha)
-        F[5][index] = calculate_F6(field.N_visit[0][index])
-        F[6][index] = calculate_F7(field.brightness)
+        F[3][index] = calculate_F4(field.alt, index)
+        F[4][index] = calculate_F5(field.ha, index)
+        F[5][index] = calculate_F6(field.N_visit['all'][0], field.Max_N_visit['all'], field.N_visit[0][index], field.Max_N_visit[0][index])
+        F[6][index] = calculate_F7(field.brightness,index)
     return F
 
 def eval_cost(F, f_weight):
@@ -116,8 +118,12 @@ def eval_performance(episode_output, preferences):
     return p
 
 
-def calculate_F1(slew_t_to):            # slew time cost 0~2
-    return (slew_t_to /ephem.second) /5
+def calculate_F1(slew_t_to, filter, curr_filter):            # slew time cost 0~2
+    normalized_slew = (slew_t_to /ephem.second) /5
+    if filter == curr_filter:
+        return normalized_slew
+    else:
+        return normalized_slew + 0.5 # cpunt for filter change time cost
 
 def calculate_F2(since_t_last_visit, n_ton_visits, t_to_invis, inf):   # night urgency -1~1
     if since_t_last_visit == inf or n_ton_visits == 2:
@@ -128,22 +134,34 @@ def calculate_F2(since_t_last_visit, n_ton_visits, t_to_invis, inf):   # night u
         else:
             return 5 * (1 - np.exp(-1* since_t_last_visit / 20 * ephem.minute))
 
-def calculate_F3(since_t_visit, inf):  # overall urgency 0~1
+def calculate_F3(since_t_visit, inf):       # overall urgency 0~1
     if since_t_visit == inf:
         return 0
     else:
         return 1/since_t_visit
 
-def calculate_F4(alt):                  # altitude cost 0~1
-    return 1 - (2/np.pi) * alt
+def calculate_F4(alt, filter):              # altitude cost 0~1
+    normalized_inv_alt = 1 - (2/np.pi) * alt
+    slops = np.array([(0.1,0.9),(0.15,0.85),(0.2,0.8),(0.25,0.75),(0.3,0.7),(0.4,0.8)], dtype = [('s1', np.float),('s2', np.float)])
+    break_p = 0.2
+    filters = ['u', 'g', 'r', 'i', 'z', 'y']
+    for index,f in enumerate(filters):
+        if filter == f:  # 2piece linear
+            if normalized_inv_alt <= break_p:
+                return normalized_inv_alt * slops[index]['s1']
+            if normalized_inv_alt > break_p:
+                return normalized_inv_alt * slops[index]['s2']
 
-def calculate_F5(ha):                   # hour angle cost 0~1
+
+    return normalized_inv_alt
+
+def calculate_F5(ha, filter):               # hour angle cost 0~1
     return np.abs(ha)/12
 
-def calculate_F6(N_visit):        # coadded depth cost 0~1
-    return N_visit
+def calculate_F6(N_visit_tot, Max_N_visit, N_visit_filter, Max_N_visit_filter):                  # coadded depth cost 0~2
+    return float(N_visit_tot)/(Max_N_visit +1) + float(N_visit_filter)/(Max_N_visit_filter +1)  # normalized n_visit +1 to make sure won't have division by 0
 
-def calculate_F7(brightness):       # normalized brightness 0~1
+def calculate_F7(brightness, filter):       # normalized brightness 0~1
     return brightness
 
 

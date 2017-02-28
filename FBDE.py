@@ -33,6 +33,7 @@ class DataFeed(object):
                  ('N_visit_u', np.int), ('t_visit_u', np.float), ('N_visit_g', np.int), ('t_visit_g', np.float), ('N_visit_r', np.int),
                  ('t_visit_r', np.float), ('N_visit_i', np.int), ('t_visit_i', np.float), ('N_visit_z', np.int), ('t_visit_z', np.float),
                  ('N_visit_y', np.int), ('t_visit_y', np.float)]
+
         fields_info  = np.zeros((self.n_fields,), dtype = dtype)
 
         fields_info['ID']      = input1['ID']
@@ -53,6 +54,12 @@ class DataFeed(object):
         fields_info['t_visit_z'] = input1['t_visit_z']
         fields_info['N_visit_y'] = input1['N_visit_y']
         fields_info['t_visit_y'] = input1['t_visit_y']
+
+        Max_N_visit = np.max(input1['N_visit']); Max_N_visit_u = np.max(input1['N_visit_u'])
+        Max_N_visit_g = np.max(input1['N_visit_g']); Max_N_visit_r = np.max(input1['N_visit_r'])
+        Max_N_visit_i = np.max(input1['N_visit_i']); Max_N_visit_z = np.max(input1['N_visit_z'])
+        Max_N_visit_y = np.max(input1['N_visit_y'])
+
 
         del input1
 
@@ -85,7 +92,7 @@ class DataFeed(object):
         slew_t = np.loadtxt("NightDataInLIS/Constants/slewMatrix.dat") * ephem.second
 
         ''' Model parameter and data'''
-        # model param
+        # model param and
         cur.execute('SELECT Value FROM ModelParam')
         input3           = pd.DataFrame(cur.fetchall(), columns= ['ModelParam'])
         self.inf         = input3['ModelParam'][0]
@@ -96,10 +103,18 @@ class DataFeed(object):
         self.max_n_night = input3['ModelParam'][5]
         self.t_interval  = input3['ModelParam'][6]
 
+        ''' Night variables'''
+        Night_var = np.array([Max_N_visit, Max_N_visit_u, Max_N_visit_g,
+                              Max_N_visit_r, Max_N_visit_i, Max_N_visit_z, Max_N_visit_y],
+                             dtype = [('Max_n_visit', np.int), ('Max_n_visit_u', np.int),
+                                      ('Max_n_visit_g', np.int), ('Max_n_visit_r', np.int),
+                                      ('Max_n_visit_i', np.int), ('Max_n_visit_z', np.int), ('Max_n_visit_y', np.int)])
+
+
 
         self.fields = []
         for index, info in enumerate(fields_info):
-            temp = FiledState(info, self.t_start, self.time_slots, all_fields_all_moments[index,:], slew_t[index,:],input3)
+            temp = FiledState(info, self.t_start, self.time_slots, all_fields_all_moments[index,:], slew_t[index,:],input3, Night_var)
             self.fields.append(temp)
 
         del all_fields_all_moments
@@ -120,7 +135,7 @@ class Scheduler(DataFeed):
         self.f_weight     = f_weight
         # scheduler decisions
         self.next_field   = None
-        self.next_filter  = None
+        self.next_filter  = 'u'
         self.filter_change= None
 
     def schedule(self):
@@ -132,7 +147,7 @@ class Scheduler(DataFeed):
             all_costs = np.zeros((self.n_fields,), dtype = [('u', np.float),('r', np.float),('i', np.float),('g', np.float),('z', np.float),('y', np.float)])
             for index, field in enumerate(self.fields):
                 field.eval_feasibility()
-                all_costs[index] = field.eval_cost(self.f_weight)
+                all_costs[index] = field.eval_cost(self.f_weight, self.next_filter)
             winner_indx, winner_cost, winner_filter = decision_maker(all_costs)
 
             # decisions made for this visit
@@ -270,7 +285,7 @@ class EpisodeStatus(object):
 ########################################################################################################################
 
 class FiledState(object): # an object of this class stores the information and status of a single field
-    def __init__(self, field_info, t_start, time_slots, all_moments_data, all_slew_to ,model_param):
+    def __init__(self, field_info, t_start, time_slots, all_moments_data, all_slew_to ,model_param, Night_var):
         # parameters (constant during the current episode)
         # by input data
         self.id       = field_info['ID']
@@ -282,6 +297,7 @@ class FiledState(object): # an object of this class stores the information and s
         self.filter_dtype_value = [('all', np.float),('u', np.float),('g', np.float),('r', np.float),('i', np.float),('z', np.float),('y', np.float)]
         self.N_visit    = np.zeros(1, self.filter_dtype_count)
         self.t_visit    = np.zeros(1, self.filter_dtype_value)
+        self.Max_N_visit= np.zeros(1, self.filter_dtype_count)
 
         self.N_visit['all']= field_info['N_visit'] # before the current episode of the scheduling
         self.t_visit['all']= field_info['t_visit'] # before the current episode of the scheduling
@@ -297,6 +313,14 @@ class FiledState(object): # an object of this class stores the information and s
         self.t_visit['z']  = field_info['t_visit_z']
         self.N_visit['y']  = field_info['N_visit_y']
         self.t_visit['y']  = field_info['t_visit_y']
+
+        self.Max_N_visit['all']  = Night_var[0]['Max_n_visit']
+        self.Max_N_visit['u'] = Night_var[0]['Max_n_visit_u']
+        self.Max_N_visit['g'] = Night_var[0]['Max_n_visit_g']
+        self.Max_N_visit['r'] = Night_var[0]['Max_n_visit_r']
+        self.Max_N_visit['i'] = Night_var[0]['Max_n_visit_i']
+        self.Max_N_visit['z'] = Night_var[0]['Max_n_visit_z']
+        self.Max_N_visit['y'] = Night_var[0]['Max_n_visit_y']
 
         #self.year_vis =                      # visibility of the year to be added
         # by calculation
@@ -401,7 +425,7 @@ class FiledState(object): # an object of this class stores the information and s
 
     def cal_variable(self, t):
         self.since_t_last_visit = np.zeros(1, self.filter_dtype_value)
-        for index in range(7):
+        for index in self.since_t_last_visit.dtype.names:
             if self.t_last_visit[0][index] == -self.inf:
                 self.since_t_last_visit[0][index] = self.inf
             else:
@@ -413,7 +437,6 @@ class FiledState(object): # an object of this class stores the information and s
             self.t_to_invis = self.t_setting - t
             if self.t_to_invis < self.t_interval /2:
                 self.t_to_invis = 0
-
 
 
     def data_feed(self, all_moments_data, all_slew_to, model_param):
@@ -431,10 +454,10 @@ class FiledState(object): # an object of this class stores the information and s
         self.feasible = eval_feasibility(self)
         return self.feasible
 
-    def eval_cost(self, f_weight):
+    def eval_cost(self, f_weight, curr_filter):
         if not self.feasible:
             self.F = None
             return self.inf * np.ones((6,))
-        self.F = eval_basis_fcn(self)
+        self.F = eval_basis_fcn(self, curr_filter)
         self.cost = eval_cost(self.F, f_weight)
         return self.cost

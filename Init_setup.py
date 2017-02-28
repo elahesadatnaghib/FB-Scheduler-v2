@@ -25,7 +25,6 @@ def initial_setup(site, end_date):
 
 
 
-
 # execution
 s = time.time()
 
@@ -37,7 +36,7 @@ Site.pressure   = 0.
 Site.horizon    = 0.
 
 #Number of the nights to generate the data for
-n_nights = 3
+n_nights = 10
 
 end_date        = ephem.Date('2020/12/31 12:00:00.00') + n_nights
 

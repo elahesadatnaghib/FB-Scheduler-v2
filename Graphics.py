@@ -236,23 +236,23 @@ def visualize(Date, PlotID = 1,FPS = 15,Steps = 20,MP4_quality = 300, Name = "LS
                         U_X.append(X); U_Y.append(Y)
                         if t >= tau:
                             visit_index_u = len(U_X) -1
-                    if filter == 'g':
+                    elif filter == 'g':
                         G_X.append(X); G_Y.append(Y)
                         if t >= tau:
                             visit_index_g = len(G_Y) -1
-                    if filter == 'r':
+                    elif filter == 'r':
                         R_X.append(X); R_Y.append(Y)
                         if t >= tau:
                             visit_index_r = len(R_Y) -1
-                    if filter == 'i':
+                    elif filter == 'i':
                         I_X.append(X); I_Y.append(Y)
                         if t >= tau:
                             visit_index_i = len(I_Y) -1
-                    if filter == 'z':
+                    elif filter == 'z':
                         Z_X.append(X); Z_Y.append(Y)
                         if t >= tau:
                             visit_index_z = len(Z_Y) -1
-                    if filter == 'y':
+                    elif filter == 'y':
                         Y_X.append(X); Y_Y.append(Y)
                         if t >= tau:
                             visit_index_y = len(Y_Y) -1
@@ -354,8 +354,8 @@ def visualize(Date, PlotID = 1,FPS = 15,Steps = 20,MP4_quality = 300, Name = "LS
             #Save current frame
             writer.grab_frame()
 
-
 '''
+
 
 Site            = ephem.Observer()
 Site.lon        = -1.2320792
@@ -372,8 +372,8 @@ for i in range(n_nights):
     Date = ephem.Date(Date_start + i) # times are in UT
 
     # create animation
-    FPS = 10            # Frame per second
-    Steps = 100          # Simulation steps
+    FPS = 5            # Frame per second
+    Steps = 200          # Simulation steps
     MP4_quality = 300   # MP4 size and quality
 
     PlotID = 1        # 1 for one Plot, 2 for including covering pattern
