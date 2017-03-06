@@ -157,7 +157,7 @@ class Scheduler(DataFeed):
         self.filter_change= None
 
         # scheduler trainer
-
+        trainer = Trainer()
 
 
     def schedule(self):
@@ -606,4 +606,50 @@ class WatchData(object):
             self.data_vec_index = 0
 
 
+
+class Trainer(object):
+    def __init__(self):
+        self.update_period = 10
+        self.learning_rate = 0.1
+
+    def train(self, scheduler_out):
+        f_weight_cor = self.eval_new_f_weight(scheduler_out)
+        return f_weight_cor
+
+    def eval_new_f_weight(self, scheduler_out):
+        G0 = eval_gain(scheduler_out[0:-self.update_period])
+        G1 = eval_gain(scheduler_out)
+        del_G = G1 - G0
+        del_C = self.eval_del_C(scheduler_out)
+
+        del_O = del_C - del_G
+        sum_F = self.eval_sum_F(scheduler_out)
+
+        del_f_weight = del_O / sum_F
+        for i,del_f in enumerate(del_f_weight):
+            if del_f > 0:
+                del_f_weight[i] = 0.1
+            if del_f < 0:
+                del_f_weight[i] = -0.1
+
+        print(G0,G1,del_G,del_C,del_f_weight)
+        return del_f_weight * self.learning_rate
+
+    def eval_del_C(self, scheduler_out):
+        len_output = len(scheduler_out)
+        #print(scheduler_out[len_output - self.update_period:]['Cost'])
+        return np.sum(scheduler_out[len_output - self.update_period:]['Cost'])
+
+    def eval_sum_F(self, scheduler_out):
+        len_output = len(scheduler_out)
+        output_seg =scheduler_out[len_output - self.update_period:]
+        s_F1 = np.sum(output_seg['F1'])
+        s_F2 = np.sum(output_seg['F2'])
+        s_F3 = np.sum(output_seg['F3'])
+        s_F4 = np.sum(output_seg['F4'])
+        s_F5 = np.sum(output_seg['F5'])
+        s_F6 = np.sum(output_seg['F6'])
+        s_F7 = np.sum(output_seg['F7'])
+        s_F = np.array([s_F1, s_F2, s_F3, s_F4, s_F5, s_F6, s_F7])
+        return  s_F
 

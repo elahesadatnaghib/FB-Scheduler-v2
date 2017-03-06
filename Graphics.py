@@ -357,7 +357,7 @@ def visualize(Date, PlotID = 1,FPS = 15,Steps = 20,MP4_quality = 300, Name = "LS
             writer.grab_frame()
 
 
-
+'''
 
 
 Site            = ephem.Observer()
@@ -382,3 +382,4 @@ for i in range(n_nights):
     PlotID = 1        # 1 for one Plot, 2 for including covering pattern
     visualize(Date, PlotID ,FPS, Steps, MP4_quality, 'Visualizations/LSST1plot{}.mp4'.format(i + 1), showClouds= True)
 
+'''
