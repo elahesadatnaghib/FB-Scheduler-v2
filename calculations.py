@@ -354,3 +354,32 @@ def alt_allocation(alt, filter_name):
     if n_alt < 0.45:
         n_alt = 0.45
     return 100*np.square(n_alt-traps[index]) + ((1./(1-np.cos(alt))) -1) * 5
+
+
+
+
+def eval_gain(episode_output):
+
+    # non-linear
+    u, c           = np.unique(episode_output['Field_id'], return_counts=True)
+    unique, counts = np.unique(c, return_counts=True)
+    try:
+        N_triple    = counts[unique == 3][0]
+    except:
+        N_triple    = 0
+    try:
+        N_double    = counts[unique == 2][0]
+    except:
+        N_double    = 0
+    try:
+        N_single    = counts[unique == 1][0]
+    except:
+        N_single    = 0
+
+    # objective function
+    g = 10* N_double - N_single
+    if g<0:
+        g=0
+
+    return g
+
