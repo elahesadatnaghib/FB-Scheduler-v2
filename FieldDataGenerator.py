@@ -84,7 +84,7 @@ def Field_data(site, end_d):
     except:
         rowid_moments= 0
         nightid      = 0
-        start_d = ephem.Date('2020/12/31 12:00:00.00')
+        start_d = ephem.Date('2015/6/28 12:00:00.00')
 
 
     # initialize sources
@@ -99,8 +99,6 @@ def Field_data(site, end_d):
         temp._epoch = eq.epoch
         source.append(temp)
 
-
-
     lsst = site
     # constructing an iterable of desired nights
     all_nights = []
@@ -113,6 +111,11 @@ def Field_data(site, end_d):
         # define date and time interval for airmass, and airmass limits
         # times are in UT
         time_range = set_data_range(lsst, night, dt)
+        '''read in best first estimation of unpredictable data'''
+
+        all_cov_data  = np.loadtxt("NightDataInLIS/Clouds{}.lis".format(int(ephem.julian_date(night))))
+
+        '''  '''
         for s_index,s in enumerate(source):
             temp = 0
             temp2=0.
@@ -134,7 +137,7 @@ def Field_data(site, end_d):
                 if hourang < -12:
                     hourang = hourang + 24
                 moonsep = ephem.separation(moon,s)
-                covered = False
+                covered = bool(all_cov_data[s_index,t_index] == 2 or all_cov_data[s_index,t_index] == 1 or all_cov_data[s_index,t_index] == -1)
                 brightness = 0.
 
                 cur.execute('INSERT INTO FieldData VALUES (?,?,?,?,?,?,?,?,?,?,?)',

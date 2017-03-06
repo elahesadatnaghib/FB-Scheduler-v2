@@ -14,7 +14,7 @@ class DataFeed(object):
     def __init__(self, date, site, custom_episode = False):
         self.Site   = site
 
-        self.night_id = int(date - ephem.Date('2020/12/31 12:00:00.00')) + 1
+        self.night_id = int(date - ephem.Date('2015/6/28 12:00:00.00')) + 1
 
         # connecting to db
         con = lite.connect('FBDE.db')
@@ -60,19 +60,19 @@ class DataFeed(object):
         Max_N_visit_i = np.max(input1['N_visit_i']); Max_N_visit_z = np.max(input1['N_visit_z'])
         Max_N_visit_y = np.max(input1['N_visit_y'])
 
-
         del input1
 
         ''' import data for the  current night '''
-        cur.execute('SELECT ephemDate, altitude, hourangle, visible, covered, brightness FROM FieldData where nightid == {}'.format(self.night_id))
-        input2 = pd.DataFrame(cur.fetchall(), columns=['ephemDate', 'alts','hourangs', 'visible', 'covered', 'brightness'])
+        cur.execute('SELECT ephemDate, altitude, hourangle, visible, covered, brightness, moonseparation FROM FieldData where nightid == {}'.format(self.night_id))
+        input2 = pd.DataFrame(cur.fetchall(), columns=['ephemDate', 'alts','hourangs', 'visible', 'covered', 'brightness', 'moonsep'])
 
         self.n_t_slots = (np.shape(input2)[0]) / self.n_fields
         all_fields_all_moments = np.zeros((self.n_fields,self.n_t_slots,), dtype =  [('alts', np.float),
                                                                                      ('hourangs', np.float),
                                                                                      ('visible', np.bool),
                                                                                      ('covered', np.bool),
-                                                                                     ('brightness', np.float)])
+                                                                                     ('brightness', np.float),
+                                                                                     ('moonsep', np.float)])
 
         self.time_slots =  np.zeros(self.n_t_slots)
         self.time_slots = input2['ephemDate'][0:self.n_t_slots]
@@ -83,6 +83,7 @@ class DataFeed(object):
             all_fields_all_moments[i, :]['visible']    = input2['visible'][i * self.n_t_slots : (i+1) * self.n_t_slots]
             all_fields_all_moments[i, :]['covered']    = input2['covered'][i * self.n_t_slots : (i+1) * self.n_t_slots] #TODO covered and brighntess should be updatable
             all_fields_all_moments[i, :]['brightness'] = input2['brightness'][i * self.n_t_slots : (i+1) * self.n_t_slots]
+            all_fields_all_moments[i, :]['moonsep']    = input2['moonsep'][i * self.n_t_slots : (i+1) * self.n_t_slots]
         del input2
 
 
@@ -111,7 +112,7 @@ class DataFeed(object):
                                       ('Max_n_visit_i', np.int), ('Max_n_visit_z', np.int), ('Max_n_visit_y', np.int)])
 
 
-
+        # create fields
         self.fields = []
         for index, info in enumerate(fields_info):
             temp = FiledState(info, self.t_start, self.time_slots, all_fields_all_moments[index,:], slew_t[index,:],input3, Night_var)
@@ -119,11 +120,24 @@ class DataFeed(object):
 
         del all_fields_all_moments
         del slew_t
-        del input3
-        con.close()
+
+        ''' Filter variables'''
+        cur.execute('SELECT * FROM FilterStatistics')
+        input4 = cur.fetchall()
+
+        # create filters
+        f_names = ['u', 'g', 'r', 'i', 'z', 'y']
+        self.filters = []
+        for info, f_name in zip(input4,f_names):
+            temp = FilterState(f_name, info, input3)
+            self.filters.append((temp))
+
         # create episode
         self.episode = EpisodeStatus(self.t_start, self.t_end, self.time_slots, self.t_expo)
 
+
+        del input3
+        con.close()
 ########################################################################################################################
 ########################################################################################################################
 
@@ -133,40 +147,49 @@ class Scheduler(DataFeed):
 
         # scheduler parameters
         self.f_weight     = f_weight
+
         # scheduler decisions
         self.next_field   = None
-        self.next_filter  = 'u'
+        self.next_filter  = None
         self.filter_change= None
 
     def schedule(self):
-        self.episode.init_episode(self.fields)  # Initialize scheduling
-        self.episode.field.update_visit_var(self.t_start, self.episode.last_filter)
+        self.episode.init_episode(self.fields, self.filters)  # Initialize scheduling
+
+        self.episode.field.update_visit_var(self.t_start, self.episode.filter.name)
         self.reset_output()
 
         while self.episode.t < self.episode.t_end:
-            all_costs = np.zeros((self.n_fields,), dtype = [('u', np.float),('r', np.float),('i', np.float),('g', np.float),('z', np.float),('y', np.float)])
+            all_costs = np.zeros((self.n_fields,), dtype = [('u', np.float),('g', np.float),('r', np.float),('i', np.float),('z', np.float),('y', np.float)])
+            for f in self.filters:
+                f.eval_feasibility(self.episode.filter)
             for index, field in enumerate(self.fields):
                 field.eval_feasibility()
-                all_costs[index] = field.eval_cost(self.f_weight, self.next_filter)
-            winner_indx, winner_cost, winner_filter = decision_maker(all_costs)
-
+                all_costs[index] = field.eval_cost(self.f_weight, self.episode.filter.name, self.filters)
+            winner_indx, winner_cost, winner_filter_index = decision_maker(all_costs)
             # decisions made for this visit
             self.next_field    = self.fields[winner_indx]
-            self.filter_change = (self.next_filter != None and self.next_filter != winner_filter)
-            self.next_filter   = winner_filter
+            self.next_filter   = self.filters[winner_filter_index]
+            self.filter_change = (self.episode.filter != self.next_filter)
 
-            # update visit variables of the next field
+            # evaluate time of the visit
             t_visit = eval_t_visit(self.episode.t, self.next_field.slew_t_to, self.filter_change, 2 * ephem.minute)
-            self.next_field.update_visit_var(t_visit, self.next_filter)
+            # update visit variables of the next field
+            self.next_field.update_visit_var(t_visit, self.next_filter.name)
+            # update visit variables of the next filter
+            self.next_filter.update_visit_var(t_visit, self.episode.step)
             # record visit
             self.record_visit()
+
 
             '''prepare for the next visit'''
             # update the episode status
             dt = eval_dt(self.next_field.slew_t_to, self.t_expo, self.filter_change, 2 * ephem.minute)
-            self.episode.update_episode_var(dt, self.next_field, winner_filter)
+            self.episode.update_episode_var(dt, self.next_field, self.next_filter)
             # update all fields
             self.episode.set_fields(self.fields, self.next_field)
+            # update all filters
+            self.episode.set_filter(self.filters, self.next_filter)
         self.wrap_up()
 
     def reset_output(self):
@@ -180,12 +203,12 @@ class Scheduler(DataFeed):
         self.op_log = open("Output/log{}.lis".format(self.night_id),"w")
 
         #record the first entry
-        entry1 = record_assistant(self.episode.field, self.episode.t, self.episode.last_filter, self.output_dtype, first_entry=True)
+        entry1 = record_assistant(self.episode.field, self.episode.t, self.episode.filter.name, self.output_dtype, first_entry=True)
         self.NightOutput = np.append(self.NightOutput, entry1)
         self.op_log.write(json.dumps(entry1.tolist())+"\n")
 
     def record_visit(self):
-        entry = record_assistant(self.next_field, self.episode.t, self.episode.last_filter, self.output_dtype)
+        entry = record_assistant(self.next_field, self.episode.t, self.episode.filter.name, self.output_dtype)
         self.NightOutput = np.append(self.NightOutput, entry)
         self.op_log.write(json.dumps(entry.tolist())+"\n")
 
@@ -218,22 +241,22 @@ class EpisodeStatus(object):
         self.step       = None                 # current decision number
         self.epi_prog   = None                 # Episode progress
         self.field      = None                 # current field
-
-        self.third_last_filter  = None
-        self.second_last_filter = None
-        self.last_filter        = None
-        self.n_f_change         = None                 # Number of filter change
+        self.filter     = None                 # current filter
+        self.filter_seq = None                 # sequence of filters used
+        self.f_change_flag = None
 
 
-    def init_episode(self, fields):
+    def init_episode(self, fields, filters):
         self.clock(0, reset = True)
-        self.set_filter(None, initialization = True)
+        self.set_filter(filters, self.filter, initialization = True)
         self.set_fields(fields, self.field, initialization = True)
 
     def update_episode_var(self, dt, field, filter):
         self.clock(dt)
-        self.field = field
-        self.set_filter(filter)
+        self.field  = field
+        self.filter = filter
+        self.filter_dynamic()
+
 
     def clock(self, dt, reset = False): # sets or resets t, n, step
         if reset:
@@ -265,18 +288,23 @@ class EpisodeStatus(object):
         for field in fields:
             field.update_field(self.n, self.t, index, initialization)
 
-    def set_filter(self, visit_filter, initialization = False):
+    def set_filter(self, filters, current_filter, initialization = False):
         if initialization:
-            self.third_last_filter  = None
-            self.second_last_filter = None
-            self.last_filter        = eval_init_filter()
-            self.n_f_change = 0
-        else:
-            if self.last_filter != visit_filter:
-                self.n_f_change += 1
-            self.third_last_filter  = self.second_last_filter
-            self.second_last_filter = self.last_filter
-            self.last_filter        = visit_filter
+            self.filter = eval_init_filter(filters)
+            self.f_change_flag = False
+            self.filter_seq    = []
+        for f in filters:
+            f.update_filter(self.t, current_filter, initialization)
+
+    def filter_dynamic(self):
+        try:
+            if self.filter_seq[-1] != self.filter.name:
+                self.filter_seq.append(self.filter.name)
+                self.f_change_flag = True
+            else:
+                self.f_change_flag = False
+        except:
+            self.f_change_flag = False
 
 
 
@@ -338,6 +366,7 @@ class FiledState(object): # an object of this class stores the information and s
         self.visible             = None
         self.brightness          = None
         self.covered             = None
+        self.moonsep             = None
         # by calculation
         self.since_t_last_visit  = None
         self.t_to_invis          = None
@@ -366,6 +395,7 @@ class FiledState(object): # an object of this class stores the information and s
         self.visible   = self.all_moments_data[n]['visible']
         self.brightness= self.all_moments_data[n]['brightness']
         self.covered   = self.all_moments_data[n]['covered']
+        self.moonsep   = self.all_moments_data[n]['moonsep']
         if initialization :
             self.n_ton_visits = np.zeros(1, self.filter_dtype_count)
             self.t_last_visit = np.zeros(1,self.filter_dtype_value)
@@ -377,36 +407,20 @@ class FiledState(object): # an object of this class stores the information and s
     def set_param(self, night_visibility):
         self.night_vis = night_visibility
 
-    def set_variable(self, slew_t_to, alt, ha, bri, cov, t):
+    def set_variable(self, slew_t_to, alt, ha, bri, cov, msep, t):
         self.slew_t_to = slew_t_to
         self.alt       = alt
         self.ha        = ha
         self.brightness= bri
         self.covered   = cov
+        self.moonsep   = msep
         self.cal_variable(t)
 
-    def update_visit_var(self, t_new_visit, filter):
+    def update_visit_var(self, t_new_visit, filter_name):
         self.n_ton_visits[0]['all'] += 1
         self.t_last_visit[0]['all'] = t_new_visit
-
-        if filter == 'u':
-            self.n_ton_visits[0]['u'] += 1
-            self.t_last_visit[0]['u'] = t_new_visit
-        if filter == 'r':
-            self.n_ton_visits[0]['r'] += 1
-            self.t_last_visit[0]['r'] = t_new_visit
-        if filter == 'i':
-            self.n_ton_visits[0]['i'] += 1
-            self.t_last_visit[0]['i'] = t_new_visit
-        if filter == 'g':
-            self.n_ton_visits[0]['g'] += 1
-            self.t_last_visit[0]['g'] = t_new_visit
-        if filter == 'z':
-            self.n_ton_visits[0]['z'] += 1
-            self.t_last_visit[0]['z'] = t_new_visit
-        if filter == 'y':
-            self.n_ton_visits[0]['y'] += 1
-            self.t_last_visit[0]['y'] = t_new_visit
+        self.n_ton_visits[0][filter_name] += 1
+        self.t_last_visit[0][filter_name] = t_new_visit
 
     def cal_param(self, t_start, time_slots):
         self.since_t_visit = np.zeros(1,self.filter_dtype_value)
@@ -454,10 +468,71 @@ class FiledState(object): # an object of this class stores the information and s
         self.feasible = eval_feasibility(self)
         return self.feasible
 
-    def eval_cost(self, f_weight, curr_filter):
+    def eval_cost(self, f_weight, curr_filter_name, filters):
         if not self.feasible:
             self.F = None
             return self.inf * np.ones((6,))
-        self.F = eval_basis_fcn(self, curr_filter)
-        self.cost = eval_cost(self.F, f_weight)
+        self.F = eval_basis_fcn(self, curr_filter_name, filters)
+        self.cost = eval_cost(self.F, f_weight, filters)
         return self.cost
+
+
+class FilterState(object):
+    def __init__(self, f_name, info, model_param):
+        # filter parameters (constant during the current episode)
+        self.name               = f_name
+        self.N_visit_in         = info[6]
+
+        # filter variables (update after each observation step)
+        # by calculation
+        self.t_since_last_visit_in = None
+        self.feasible           = None
+
+        # filter visit variables (update after each visit in this specific filter)
+        self.t_last_visit_in = None
+        self.n_visit_in      = None
+        self.n_current_batch = None
+        self.visit_seq       = None
+        self.n_changed_to    = None
+
+        # model parameter
+        self.f_change_t  = None
+        self.inf         = model_param['ModelParam'][0]
+        self.eps         = model_param['ModelParam'][1]
+
+    def update_filter(self, t, current_filter, initialization):
+        if initialization:
+            self.n_visit_in      = 0
+            self.n_current_batch = 0
+            self.t_last_visit_in = -self.inf
+            self.visit_seq       = []
+            self.n_changed_to    = 0
+        elif current_filter.name != self.name:
+            self.n_current_batch = 0
+        self.cal_variable(t)
+
+    def update_visit_var(self, t_new_visit, step):
+        self.t_last_visit_in = t_new_visit
+        self.n_visit_in += 1
+        try:
+            if self.visit_seq[-1] == step -1:
+                self.n_current_batch += 1
+            else:
+                self.n_current_batch = 1
+                self.n_changed_to   += 1
+        except:
+            self.n_current_batch = 1
+            self.n_changed_to   += 1
+        self.visit_seq.append(step)
+
+    def set_variable(self, t):
+        self.cal_variable(t)
+
+    def cal_variable(self, t):
+        if self.t_last_visit_in == -self.inf:
+            self.t_since_last_visit_in = self.inf
+        else:
+            self.t_since_last_visit_in = t - self.t_last_visit_in
+
+    def eval_feasibility(self, current_filter):
+        self.feasible = eval_feasibility_filter(self, current_filter)

@@ -12,8 +12,6 @@ from Graphics import visualize
 
 
 
-
-
 Site            = ephem.Observer()
 Site.lon        = -1.2320792
 Site.lat        = -0.517781017
@@ -23,8 +21,8 @@ Site.horizon    = 0.
 
 
 
-F_weight        = [ 1.29964032,  9.83017599,  0.21240644,  6.3694487,   0.15822261,  1.11310888, 8.74563025] # learning result
-
+#F_weight        = [ 1.29964032,  9.83017599,  0.21240644,  6.3694487,   0.15822261,  1.11310888, 8.74563025] # learning result
+F_weight        = [1, 1, 1, 1, 1, 1, 1]
 # F1: slew time cost 0~2
 # F2: night urgency -1~1
 # F3: overall urgency 0~1
@@ -39,7 +37,7 @@ n_nights = 10 # number of the nights to be scheduled starting from 1st Jan. 2021
 
 s = time.time()
 
-Date_start = ephem.Date(ephem.Date('2020/12/31 12:00:00.00')) # times are in UT
+Date_start = ephem.Date('2015/6/28 12:00:00.00') # times are in UT
 
 
 for i in range(n_nights):
@@ -68,7 +66,7 @@ for i in range(n_nights):
     MP4_quality = 300   # MP4 size and quality
 
     PlotID = 1        # 1 for one Plot, 2 for including covering pattern
-    visualize(Date, PlotID ,FPS, Steps, MP4_quality, 'Visualizations/LSST1plot{}.mp4'.format(i + 1), showClouds= False)
+    visualize(Date, PlotID ,FPS, Steps, MP4_quality, 'Visualizations/LSST1plot{}.mp4'.format(i + 1), showClouds= True)
     t4 = time.time()
     print('\nVisualization for {} created in {} sec'.format(Date, t4 - t3))
 

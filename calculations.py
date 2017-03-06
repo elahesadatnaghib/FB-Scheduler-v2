@@ -14,8 +14,8 @@ def eval_init_state(fields, suggestion, manual = False):        # TODO Feasibili
         winner_index = np.argmax(all_alt_start)
         return fields[winner_index]
 
-def eval_init_filter():
-    return 'u'
+def eval_init_filter(filters):
+    return filters[0]
 
 def eval_feasibility(field):
     if not field.visible:
@@ -32,42 +32,61 @@ def eval_feasibility(field):
         return False
     if field.slew_t_to > 5 *ephem.second and field.since_t_last_visit[0]['all'] != field.inf:
         return False
+    if field.covered:
+        return False
     return True
 
-def eval_basis_fcn(field, curr_filter):
-    F    = np.zeros(7, dtype = [('u', np.float),('r', np.float),('i', np.float),('g', np.float),('z', np.float),('y', np.float)])  # 7 is the number of basis functions
-    for index in F.dtype.names:
-        F[0][index] = calculate_F1(field.slew_t_to, index, curr_filter)
-        F[1][index] = calculate_F2(field.since_t_last_visit[0][index], field.n_ton_visits[0][index], field.t_to_invis, field.inf)
-        F[2][index] = calculate_F3(field.since_t_visit[0][index], field.inf)
-        F[3][index] = calculate_F4(field.alt, index)
-        F[4][index] = calculate_F5(field.ha, index)
-        F[5][index] = calculate_F6(field.N_visit['all'][0], field.Max_N_visit['all'], field.N_visit[0][index], field.Max_N_visit[0][index])
-        F[6][index] = calculate_F7(field.brightness,index)
+def eval_feasibility_filter(filter, current_filter):
+    if  (filter.name != current_filter.name) and current_filter.n_current_batch <= 30:
+        return False
+
+    return True
+
+def eval_basis_fcn(field, curr_filter_name, filters):
+    F    = np.zeros(7, dtype = [('u', np.float),('g', np.float),('r', np.float),('i', np.float),('z', np.float),('y', np.float)])  # 7 is the number of basis functions
+    for f in filters:
+        if f.feasible:
+            F[0][f.name] = calculate_F1(field.slew_t_to, f.name, curr_filter_name)
+            F[1][f.name] = calculate_F2(field.since_t_last_visit[0][f.name], field.n_ton_visits[0][f.name], field.t_to_invis, field.inf)
+            F[2][f.name] = calculate_F3(filters, f.name)
+            F[3][f.name] = calculate_F4(field.alt, f.name)
+            F[4][f.name] = calculate_F5(field.ha, f.name)
+            F[5][f.name] = calculate_F6(field.N_visit['all'][0], field.Max_N_visit['all'], field.N_visit[0][f.name], field.Max_N_visit[0][f.name])
+            F[6][f.name] = calculate_F7(field.brightness,field.moonsep, f.name)
+        else:
+            F[0][f.name] = None
+            F[1][f.name] = None
+            F[2][f.name] = None
+            F[3][f.name] = None
+            F[4][f.name] = None
+            F[5][f.name] = None
+            F[6][f.name] = None
     return F
 
-def eval_cost(F, f_weight):
-    c = np.zeros(1, dtype = [('u', np.float),('r', np.float),('i', np.float),('g', np.float),('z', np.float),('y', np.float)])
-    for index in F.dtype.names:
-        c[0][index] = np.dot(F[:][index],f_weight)
+def eval_cost(F, f_weight, filters):
+    c = np.zeros(1, dtype = [('u', np.float),('g', np.float),('r', np.float),('i', np.float),('z', np.float),('y', np.float)])
+    for f in filters:
+        if f.feasible:
+            c[0][f.name] = np.dot(F[:][f.name],f_weight)
+        else:
+            c[0][f.name] = f.inf
     return c
 
 def decision_maker(all_costs):
-    min_cost = np.zeros(1, dtype = [('u', np.float),('r', np.float),('i', np.float),('g', np.float),('z', np.float),('y', np.float)])
-    min_index = np.zeros(1, dtype = [('u', np.int),('r', np.int),('i', np.int),('g', np.int),('z', np.int),('y', np.int)])
+    min_cost  = np.zeros(6, dtype= np.int)
+    min_index = np.zeros(6, dtype= np.int)
 
-    winner_filter = 'u'
-    for index in min_cost.dtype.names:
-        min_index[index] = np.argmin(all_costs[:][index])
-        min_cost[0][index]  = all_costs[min_index[index]][index]
-        if min_cost[0][index] < min_cost[0][winner_filter]:
-            winner_filter = index
+    winner_filter_index = 0
+    for index,f in enumerate(['u', 'g', 'r', 'i', 'z', 'y']):
+        min_index[index] = np.argmin(all_costs[:][f])
+        min_cost[index]  = np.min(all_costs[:][f])
 
-    winner_index = min_index[0][winner_filter]
-    winner_cost  =  min_cost[0][winner_filter]
-
+        if min_cost[index] < min_cost[winner_filter_index]:
+            winner_filter_index = index
+    winner_index = min_index[winner_filter_index]
+    winner_cost  =  min_cost[winner_filter_index]
     #TODO check for close competitors
-    return winner_index, winner_cost, winner_filter
+    return winner_index, winner_cost, winner_filter_index
 
 def eval_dt(slew_t_to, t_expo, filter_change, filter_change_t):
     if filter_change:
@@ -123,56 +142,63 @@ def calculate_F1(slew_t_to, filter, curr_filter):            # slew time cost 0~
     if filter == curr_filter:
         return normalized_slew
     else:
-        return normalized_slew + 0.5 # cpunt for filter change time cost
+        return normalized_slew + 4 # count for filter change time cost
 
-def calculate_F2(since_t_last_visit, n_ton_visits, t_to_invis, inf):   # night urgency -1~1
-    if since_t_last_visit == inf or n_ton_visits == 2:
-        return 5
+def calculate_F2(since_t_last_visit, n_ton_visits, t_to_invis, inf):   # night urgency 0~10
+    if since_t_last_visit == inf:
+        filter_indep =  5
+    if n_ton_visits == 2:
+        filter_indep = 10
     elif n_ton_visits == 1:
         if t_to_invis < 30 * ephem.minute:
-            return 0
+            filter_indep =  0
         else:
-            return 5 * (1 - np.exp(-1* since_t_last_visit / 20 * ephem.minute))
+            filter_indep = 5 * (1 - np.exp(-1* since_t_last_visit / 20 * ephem.minute))
+    return filter_indep
 
-def calculate_F3(since_t_visit, inf):       # overall urgency 0~1
-    if since_t_visit == inf:
-        return 0
-    else:
-        return 1/since_t_visit
-
-def calculate_F4(alt, filter):              # altitude cost 0~1
-    normalized_inv_alt = 1 - (2/np.pi) * alt
-    slops = np.array([(0.1,0.9),(0.15,0.85),(0.2,0.8),(0.25,0.75),(0.3,0.7),(0.4,0.8)], dtype = [('s1', np.float),('s2', np.float)])
-    break_p = 0.2
-    filters = ['u', 'g', 'r', 'i', 'z', 'y']
-    for index,f in enumerate(filters):
-        if filter == f:  # 2piece linear
-            if normalized_inv_alt <= break_p:
-                return normalized_inv_alt * slops[index]['s1']
-            if normalized_inv_alt > break_p:
-                return normalized_inv_alt * slops[index]['s2']
+def calculate_F3(filters, f_name):       # filter urgency 0~1
+    index = ['u','g','r','i','z','y'].index(f_name)
+    max_n_visit_in = max(f.n_visit_in for f in filters)
+    urgency = float(filters[index].n_visit_in) / (max_n_visit_in +1)
+    return filters[index].n_changed_to + urgency
 
 
-    return normalized_inv_alt
+def calculate_F4(alt, filter_name):              # altitude cost 0~1
+    #filter_indep_alt_cost = (1./(1-np.cos(alt))) -1 # 0~2.5
+    #filter_indep_alt_cost = 1- alt/np.pi
+    #filter_corr_alt_cost  = corr_alt_for_filter(filter_indep_alt_cost, filter_name)
+    filter_corr_alt_cost   = alt_allocation(alt, filter_name)
+    return filter_corr_alt_cost
 
 def calculate_F5(ha, filter):               # hour angle cost 0~1
-    return np.abs(ha)/12
+    return np.abs(ha)
 
-def calculate_F6(N_visit_tot, Max_N_visit, N_visit_filter, Max_N_visit_filter):                  # coadded depth cost 0~2
+def calculate_F6(N_visit_tot, Max_N_visit, N_visit_filter, Max_N_visit_filter):                  # overall urgency 0~2
     return float(N_visit_tot)/(Max_N_visit +1) + float(N_visit_filter)/(Max_N_visit_filter +1)  # normalized n_visit +1 to make sure won't have division by 0
 
-def calculate_F7(brightness, filter):       # normalized brightness 0~1
+def calculate_F7(brightness, moonsep, filter_name):       # normalized brightness 0~1 #TODO has to go to the constraints
+    if moonsep < np.deg2rad(25) and filter_name == 'u':
+        return 1e10
+    if moonsep < np.deg2rad(20) and filter_name == 'g':
+        return 1e10
+    if moonsep < np.deg2rad(15) and filter_name == 'r':
+        return 1e10
+    if moonsep < np.deg2rad(10) and filter_name == 'i':
+        return 1e10
+    if moonsep < np.deg2rad(5) and filter_name == 'z':
+        return 1e10
+    if moonsep < np.deg2rad(0) and filter_name == 'y':
+        return 1e10
     return brightness
 
 
 
-
 # miscellaneous
-def record_assistant(field, t, filter, output_dtype, first_entry = False):
+def record_assistant(field, t, filter_name, output_dtype, first_entry = False):
     if first_entry:
         entry = np.array((field.id,
                           float(t),
-                          filter,
+                          filter_name,
                           field.n_ton_visits[0]['all'],
                           field.N_visit[0]['all'],
                           field.n_ton_visits[0]['u'],
@@ -212,7 +238,7 @@ def record_assistant(field, t, filter, output_dtype, first_entry = False):
     else:
         entry = np.array((field.id,
                           float(t),
-                          filter,
+                          filter_name,
                           field.n_ton_visits[0]['all'],
                           field.N_visit[0]['all'],
                           field.n_ton_visits[0]['u'],
@@ -227,7 +253,7 @@ def record_assistant(field, t, filter, output_dtype, first_entry = False):
                           field.N_visit[0]['z'],
                           field.n_ton_visits[0]['y'],
                           field.N_visit[0]['y'],
-                          field.cost[0][filter],
+                          field.cost[0][filter_name],
                           field.slew_t_to,
                           field.since_t_last_visit[0]['all'],
                           field.since_t_visit[0]['all'],
@@ -248,8 +274,8 @@ def record_assistant(field, t, filter, output_dtype, first_entry = False):
                           field.t_to_invis,
                           field.brightness,
                           field.covered,
-                          field.F[0][filter], field.F[1][filter], field.F[2][filter], field.F[3][filter], field.F[4][filter],
-                          field.F[5][filter], field.F[6][filter]), dtype = output_dtype)
+                          field.F[0][filter_name], field.F[1][filter_name], field.F[2][filter_name], field.F[3][filter_name],
+                          field.F[4][filter_name], field.F[5][filter_name], field.F[6][filter_name]), dtype = output_dtype)
 
     return entry
 
@@ -300,3 +326,31 @@ def format_output():
                          ('F6', np.float),
                          ('F7', np.float)]
     return output_dtype
+
+
+def corr_alt_for_filter(x, filter_name):
+    filters = ['u', 'g', 'r', 'i', 'z', 'y']
+    break_point = 0.2
+    # values at 0, breakpoint, and 1
+    vals = np.array([(0,0.1,4.5),(.2,.4,4.4),(.4,.7,4.3),(.6,1.0,4.2),(.8,1.3,4.1),(1,1.6,4)])
+    for index,f in enumerate(filters):
+        if filter_name == f:  # 2piece linear
+            if x <= break_point:
+                a = (vals[index][1] - vals[index][0])/ break_point
+                b = vals[index][0]
+                y = a*x + b
+            else:
+                a = (vals[index][2] - vals[index][1])/ (1-break_point)
+                b = vals[index][1]
+                y = a*x + b
+            return y
+
+def alt_allocation(alt, filter_name):
+    n_alt = 2*alt/np.pi
+    index = ['u', 'g', 'r', 'i', 'z', 'y'].index(filter_name)
+    traps = np.array([0.95,0.85,0.75,0.65,0.55,0.45])
+    if n_alt > 0.95:
+        n_alt = 0.95
+    if n_alt < 0.45:
+        n_alt = 0.45
+    return 100*np.square(n_alt-traps[index]) + ((1./(1-np.cos(alt))) -1) * 5

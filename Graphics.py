@@ -44,16 +44,17 @@ def visualize(Date, PlotID = 1,FPS = 15,Steps = 20,MP4_quality = 300, Name = "LS
     All_Fields = np.loadtxt("NightDataInLIS/Constants/UnlabelledFields.lis", unpack = True)
     N_Fields   = len(All_Fields[0])
 
-    if showClouds:
-        Time_slots = np.loadtxt("NightDataInLIS/TimeSlots{}.lis".format(int(ephem.julian_date(Date))), unpack = True)
-        All_Cloud_cover = np.loadtxt("NightDataInLIS/Clouds{}.lis".format(int(ephem.julian_date(Date))), unpack = True)
-
     Site            = ephem.Observer()
     Site.lon        = -1.2320792
     Site.lat        = -0.517781017
     Site.elevation  = 2650
     Site.pressure   = 0.
     Site.horizon    = 0.
+
+    if showClouds:
+        Time_slots = np.loadtxt("NightDataInLIS/TimeSlots{}.lis".format(int(ephem.julian_date(Date))), unpack = True)
+        All_Cloud_cover = np.loadtxt("NightDataInLIS/Clouds{}.lis".format(int(ephem.julian_date(Date))), unpack = True)
+
 
     #Initialize date and time
     lastN_start = float(Date) -1;   lastN_end = float(Date)
@@ -113,7 +114,8 @@ def visualize(Date, PlotID = 1,FPS = 15,Steps = 20,MP4_quality = 300, Name = "LS
     uu.set_color('purple'); gg.set_color('green'); rr.set_color('red')
     ii.set_color('orange'); zz.set_color('pink');   yy.set_color('deeppink')
 
-    Clouds.set_color('white');              Clouds.set_markersize(10)
+    Clouds.set_color('white');              Clouds.set_markersize(10);
+    Clouds.set_alpha(0.2);                  Clouds.set_markeredgecolor(None)
 
     ToN_History_line.set_color('orange');   ToN_History_line.set_lw(.5)
     last_10_History_line.set_color('gray');  last_10_History_line.set_lw(.5)
@@ -274,7 +276,7 @@ def visualize(Date, PlotID = 1,FPS = 15,Steps = 20,MP4_quality = 300, Name = "LS
             # F4 coordinates
             if showClouds:
                 for i in range(0,N_Fields):
-                    if All_Cloud_cover[i, Slot_n] == 1:
+                    if All_Cloud_cover[Slot_n,i] == 2 or All_Cloud_cover[Slot_n,i] == 1 or All_Cloud_cover[Slot_n,i] == -1:
                         Alt, Az = Fields_local_coordinate(All_Fields[1,i], All_Fields[2,i], t, Site)
                     if Alt > 0:
                         X, Y    = AltAz2XY(Alt,Az)
@@ -354,9 +356,10 @@ def visualize(Date, PlotID = 1,FPS = 15,Steps = 20,MP4_quality = 300, Name = "LS
             #Save current frame
             writer.grab_frame()
 
+
+
+
 '''
-
-
 Site            = ephem.Observer()
 Site.lon        = -1.2320792
 Site.lat        = -0.517781017
@@ -366,17 +369,17 @@ Site.horizon    = 0.
 
 n_nights = 3 # number of the nights to be scheduled starting from 1st Jan. 2021
 
-Date_start = ephem.Date(ephem.Date('2020/12/31 12:00:00.00')) # times are in UT
+Date_start = ephem.Date('2015/6/28 12:00:00.00') # times are in UT
 
 for i in range(n_nights):
     Date = ephem.Date(Date_start + i) # times are in UT
 
     # create animation
-    FPS = 5            # Frame per second
-    Steps = 200          # Simulation steps
+    FPS = 10            # Frame per second
+    Steps = 100          # Simulation steps
     MP4_quality = 300   # MP4 size and quality
 
     PlotID = 1        # 1 for one Plot, 2 for including covering pattern
-    visualize(Date, PlotID ,FPS, Steps, MP4_quality, 'Visualizations/LSST1plot{}.mp4'.format(i + 1), showClouds= False)
+    visualize(Date, PlotID ,FPS, Steps, MP4_quality, 'Visualizations/LSST1plot{}.mp4'.format(i + 1), showClouds= True)
 
 '''

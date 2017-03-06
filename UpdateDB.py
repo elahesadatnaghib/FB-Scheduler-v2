@@ -4,6 +4,7 @@ __author__ = 'Elahe'
 import sqlite3 as lite
 import numpy as np
 import ephem
+import pandas as pd
 
 def update(Schedule):
 
@@ -204,8 +205,81 @@ def update(Schedule):
                          Last_visit_g, N_visit_g, Last_visit_r, N_visit_r, Last_visit_i, N_visit_i, Last_visit_z, N_visit_z,
                          Last_visit_y, N_visit_y, Coadded_depth, Avg_cost, Avg_slew_t/ephem.second, Avg_alt, Avg_ha, id))
 
+    ''' update the Filter Statistics db'''
+    filters = ['u', 'g', 'r', 'i', 'z', 'y']
+    cur.execute('SELECT * FROM FilterStatistics')
+    all_data_frame = pd.DataFrame(cur.fetchall(), columns=['ID', 'Name', 'Fourth_last_visit','Third_last_visit',
+                                                          'Second_last_visit', 'Last_visit', 'N_visit', 'N_usage', 'Avg_n_visit_in_a_row',
+                                                          'Avg_alt', 'Avg_brightness', 'Avg_seeing'])
+
+    all_data = all_data_frame.copy()
+    visit_in_a_row = [0,0,0,0,0,0]
+    visit_in_a_row_flag = False
+    for i,f in enumerate(Schedule['Filter']):
+        index = filters.index(f)
+        all_data['Fourth_last_visit'][index] = all_data['Third_last_visit'][index]
+        all_data['Third_last_visit'][index]  = all_data['Second_last_visit'][index]
+        all_data['Second_last_visit'][index] = all_data['Last_visit'][index]
+        all_data['Last_visit'][index]        = Schedule[i]['ephemDate']
+        all_data['N_visit'][index]          += 1
+        visit_in_a_row[index] += 1
+        try:
+            if Schedule[i+1]['Filter'] != f: # filter change happens at the next visit
+                all_data['N_usage'][index] += 1
+                all_data['Avg_n_visit_in_a_row'][index] = float((all_data['N_usage'][index] -1)*all_data['Avg_n_visit_in_a_row'][index] + visit_in_a_row[index])/all_data['N_usage'][index]
+                visit_in_a_row[index] = 0
+        except: # last visit of the episode
+            all_data['N_usage'][index] += 1
+            all_data['Avg_n_visit_in_a_row'][index] = float((all_data['N_usage'][index] -1)*all_data['Avg_n_visit_in_a_row'][index] + visit_in_a_row[index])/all_data['N_usage'][index]
+
+        all_data['Avg_alt'][index] = ((all_data['N_visit'][index] -1)*all_data['Avg_alt'][index] + Schedule[i]['Alt'])/ all_data['N_visit'][index]
+        all_data['Avg_brightness'][index] = ((all_data['N_visit'][index] -1)*all_data['Avg_brightness'][index] + Schedule[i]['Sky_bri'])/ all_data['N_visit'][index]
+
+
+    for index,f in enumerate(filters):
+        cur.execute('UPDATE FilterStatistics SET '
+                    'Fourth_last_visit    = ?,'
+                    'Third_last_visit     = ?,'
+                    'Second_last_visit    = ?,'
+                    'Last_visit           = ?,'
+                    'N_visit              = ?,'
+                    'N_usage              = ?,'
+                    'Avg_n_visit_in_a_row = ?,'
+                    'Avg_alt              = ?,'
+                    'Avg_brightness       = ?,'
+                    'Avg_seeing           = ? WHERE Name = ?',
+                    (all_data['Fourth_last_visit'][index],
+                    all_data['Third_last_visit'][index],
+                    all_data['Second_last_visit'][index],
+                    all_data['Last_visit'][index],
+                    all_data['N_visit'][index],
+                    all_data['N_usage'][index],
+                    all_data['Avg_n_visit_in_a_row'][index],
+                    all_data['Avg_alt'][index],
+                    all_data['Avg_brightness'][index],
+                    all_data['Avg_seeing'][index],
+                    f))
 
     con.commit()
 
 
+'''
+
+Site            = ephem.Observer()
+Site.lon        = -1.2320792
+Site.lat        = -0.517781017
+Site.elevation  = 2650
+Site.pressure   = 0.
+Site.horizon    = 0.
+
+n_nights = 1 # number of the nights to be scheduled starting from 1st Jan. 2021
+
+Date_start = ephem.Date(ephem.Date('2020/12/31 12:00:00.00')) # times are in UT
+
+for i in range(n_nights):
+    Date = ephem.Date(Date_start + i) # times are in UT
+
+    Schedule = np.load("Output/Schedule{}.npy".format(i + 1))
+    update(Schedule)
+'''
 
