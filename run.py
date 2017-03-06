@@ -33,11 +33,11 @@ F_weight        = [1, 1, 1, 1, 1, 1, 1]
 
 
 
-n_nights = 10 # number of the nights to be scheduled starting from 1st Jan. 2021
+n_nights = 1 # number of the nights to be scheduled starting from 1st Jan. 2021
 
 s = time.time()
 
-Date_start = ephem.Date('2015/6/28 12:00:00.00') # times are in UT
+Date_start = ephem.Date('2015/6/28 12:00:00.00') + 9 # times are in UT
 
 
 for i in range(n_nights):

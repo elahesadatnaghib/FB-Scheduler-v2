@@ -135,6 +135,9 @@ class DataFeed(object):
         # create episode
         self.episode = EpisodeStatus(self.t_start, self.t_end, self.time_slots, self.t_expo)
 
+        #creat watch class
+        self.watch = WatchData(self.n_fields)
+
 
         del input3
         con.close()
@@ -153,6 +156,7 @@ class Scheduler(DataFeed):
         self.next_filter  = None
         self.filter_change= None
 
+
     def schedule(self):
         self.episode.init_episode(self.fields, self.filters)  # Initialize scheduling
 
@@ -166,6 +170,8 @@ class Scheduler(DataFeed):
             for index, field in enumerate(self.fields):
                 field.eval_feasibility()
                 all_costs[index] = field.eval_cost(self.f_weight, self.episode.filter.name, self.filters)
+                if field.feasible:
+                    self.watch.watch_save_one_entry(field, self.episode.step)
             winner_indx, winner_cost, winner_filter_index = decision_maker(all_costs)
             # decisions made for this visit
             self.next_field    = self.fields[winner_indx]
@@ -174,6 +180,11 @@ class Scheduler(DataFeed):
 
             # evaluate time of the visit
             t_visit = eval_t_visit(self.episode.t, self.next_field.slew_t_to, self.filter_change, 2 * ephem.minute)
+
+            # save whatch variables
+            self.watch.watch_last_entry(self.episode.step, self.episode.t, winner_indx, winner_filter_index, self.filter_change, winner_cost)
+            self.watch.save_watched_data(self.episode.step)
+
             # update visit variables of the next field
             self.next_field.update_visit_var(t_visit, self.next_filter.name)
             # update visit variables of the next filter
@@ -536,3 +547,52 @@ class FilterState(object):
 
     def eval_feasibility(self, current_filter):
         self.feasible = eval_feasibility_filter(self, current_filter)
+
+
+
+class WatchData(object):
+    def __init__(self, n_fields):
+        self.n_fields = n_fields
+        self.steps_tp_save        = [0,10,11,12]
+        self.steps_tp_save_indx   = 0
+        self.n_entries            = 8+48
+        self.data_vec = np.zeros([self.n_fields +1, self.n_entries])
+        self.data_vec_index = 0
+
+    def watch_save_one_entry(self,field, step):
+        if step == self.steps_tp_save[self.steps_tp_save_indx]:
+            entry = np.array([field.id, field.N_visit[0]['all'], field.slew_t_to, field.alt, field.covered, field.moonsep,
+                              field.n_ton_visits[0]['all'], field.since_t_last_visit[0]['all'], #8 elements
+                              field.cost[0]['u'], field.cost[0]['g'], field.cost[0]['r'], field.cost[0]['i'], field.cost[0]['z'], field.cost[0]['y'],
+                              field.F[0]['u'], field.F[0]['g'], field.F[0]['r'], field.F[0]['i'], field.F[0]['z'], field.F[0]['y'],
+                              field.F[1]['u'], field.F[1]['g'], field.F[1]['r'], field.F[1]['i'], field.F[1]['z'], field.F[1]['y'],
+                              field.F[2]['u'], field.F[2]['g'], field.F[2]['r'], field.F[2]['i'], field.F[2]['z'], field.F[2]['y'],
+                              field.F[3]['u'], field.F[3]['g'], field.F[3]['r'], field.F[3]['i'], field.F[3]['z'], field.F[3]['y'],
+                              field.F[4]['u'], field.F[4]['g'], field.F[4]['r'], field.F[4]['i'], field.F[4]['z'], field.F[4]['y'],
+                              field.F[5]['u'], field.F[5]['g'], field.F[5]['r'], field.F[5]['i'], field.F[5]['z'], field.F[5]['y'],
+                              field.F[6]['u'], field.F[6]['g'], field.F[6]['r'], field.F[6]['i'], field.F[6]['z'], field.F[6]['y']])
+            self.data_vec[self.data_vec_index, :] = entry
+            self.data_vec_index += 1
+
+
+
+    def watch_last_entry(self,step,t, next_field, next_filter, filter_change, winning_cost):
+        if step == self.steps_tp_save[self.steps_tp_save_indx]:
+            entry = np.zeros([1,self.n_entries])
+            entry[0,0] = step
+            entry[0,1] = t
+            entry[0,2] = next_field
+            entry[0,3] = next_filter
+            entry[0,4] = filter_change
+            entry[0,5] = winning_cost
+            self.data_vec[self.data_vec_index, :] = entry
+
+    def save_watched_data(self, step):
+        if step == self.steps_tp_save[self.steps_tp_save_indx]:
+            np.save('Watch/Data{}.npy'.format(step), self.data_vec)
+            if self.steps_tp_save_indx < len(self.steps_tp_save) -1:
+                self.steps_tp_save_indx +=1
+            print('Data{} is out'.format(step))
+            self.data_vec = self.data_vec = np.zeros([self.n_fields +1, self.n_entries])
+            self.data_vec_index = 0
+

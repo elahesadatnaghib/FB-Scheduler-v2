@@ -114,8 +114,8 @@ def visualize(Date, PlotID = 1,FPS = 15,Steps = 20,MP4_quality = 300, Name = "LS
     uu.set_color('purple'); gg.set_color('green'); rr.set_color('red')
     ii.set_color('orange'); zz.set_color('pink');   yy.set_color('deeppink')
 
-    Clouds.set_color('white');              Clouds.set_markersize(10);
-    Clouds.set_alpha(0.2);                  Clouds.set_markeredgecolor(None)
+    Clouds.set_color('white');              Clouds.set_markersize(6)
+    Clouds.set_alpha(0.4);                  Clouds.set_markeredgecolor(None)
 
     ToN_History_line.set_color('orange');   ToN_History_line.set_lw(.5)
     last_10_History_line.set_color('gray');  last_10_History_line.set_lw(.5)
@@ -359,7 +359,7 @@ def visualize(Date, PlotID = 1,FPS = 15,Steps = 20,MP4_quality = 300, Name = "LS
 
 
 
-'''
+
 Site            = ephem.Observer()
 Site.lon        = -1.2320792
 Site.lat        = -0.517781017
@@ -367,7 +367,7 @@ Site.elevation  = 2650
 Site.pressure   = 0.
 Site.horizon    = 0.
 
-n_nights = 3 # number of the nights to be scheduled starting from 1st Jan. 2021
+n_nights = 10 # number of the nights to be scheduled starting from 1st Jan. 2021
 
 Date_start = ephem.Date('2015/6/28 12:00:00.00') # times are in UT
 
@@ -375,11 +375,10 @@ for i in range(n_nights):
     Date = ephem.Date(Date_start + i) # times are in UT
 
     # create animation
-    FPS = 10            # Frame per second
-    Steps = 100          # Simulation steps
+    FPS = 7            # Frame per second
+    Steps = 300          # Simulation steps
     MP4_quality = 300   # MP4 size and quality
 
     PlotID = 1        # 1 for one Plot, 2 for including covering pattern
     visualize(Date, PlotID ,FPS, Steps, MP4_quality, 'Visualizations/LSST1plot{}.mp4'.format(i + 1), showClouds= True)
 
-'''
