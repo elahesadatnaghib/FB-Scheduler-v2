@@ -156,6 +156,9 @@ class Scheduler(DataFeed):
         self.next_filter  = None
         self.filter_change= None
 
+        # scheduler trainer
+
+
 
     def schedule(self):
         self.episode.init_episode(self.fields, self.filters)  # Initialize scheduling
@@ -201,6 +204,12 @@ class Scheduler(DataFeed):
             self.episode.set_fields(self.fields, self.next_field)
             # update all filters
             self.episode.set_filter(self.filters, self.next_filter)
+
+
+            ''' gray training '''
+            self.set_f_wight(self.f_weight - trainer.train(self.NightOutput))
+
+            print(self.f_weight)
         self.wrap_up()
 
     def reset_output(self):
@@ -595,4 +604,6 @@ class WatchData(object):
             print('Data{} is out'.format(step))
             self.data_vec = self.data_vec = np.zeros([self.n_fields +1, self.n_entries])
             self.data_vec_index = 0
+
+
 
