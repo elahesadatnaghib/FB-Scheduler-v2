@@ -36,7 +36,7 @@ Site.pressure   = 0.
 Site.horizon    = 0.
 
 #Number of the nights to generate the data for
-n_nights = 10
+n_nights = 3
 
 #end_date        = ephem.Date('2020/12/31 12:00:00.00') + n_nights
 end_date        = ephem.Date('2015/6/28 12:00:00.00') + n_nights

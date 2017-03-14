@@ -9,6 +9,8 @@ import sqlite3 as lite
 from calculations import *
 import pandas as pd
 
+from GrayTraining import GrayTrainer
+
 
 class DataFeed(object):
     def __init__(self, date, site, custom_episode = False):
@@ -135,6 +137,9 @@ class DataFeed(object):
         # create episode
         self.episode = EpisodeStatus(self.t_start, self.t_end, self.time_slots, self.t_expo)
 
+        #create episode
+        self.gray_trainer = GrayTrainer()
+
 
         del input3
         con.close()
@@ -142,7 +147,7 @@ class DataFeed(object):
 ########################################################################################################################
 
 class Scheduler(DataFeed):
-    def __init__(self, date, site, f_weight):
+    def __init__(self, date, site, f_weight, gray_train = False, custom_period = 0):
         super(Scheduler, self).__init__(date, site)
 
         # scheduler parameters
@@ -153,13 +158,20 @@ class Scheduler(DataFeed):
         self.next_filter  = None
         self.filter_change= None
 
+        # training
+        self.gray_train = gray_train
+        self.custom_period = custom_period
+
     def schedule(self):
         self.episode.init_episode(self.fields, self.filters)  # Initialize scheduling
 
         self.episode.field.update_visit_var(self.t_start, self.episode.filter.name)
         self.reset_output()
 
-        while self.episode.t < self.episode.t_end:
+        t_end = self.episode.t_end
+        if self.custom_period:
+            t_end = self.episode.t_start + (self.episode.t_end - self.episode.t_start) * self.custom_period
+        while self.episode.t < t_end:
             all_costs = np.zeros((self.n_fields,), dtype = [('u', np.float),('g', np.float),('r', np.float),('i', np.float),('z', np.float),('y', np.float)])
             for f in self.filters:
                 f.eval_feasibility(self.episode.filter)
@@ -181,6 +193,10 @@ class Scheduler(DataFeed):
             # record visit
             self.record_visit()
 
+            ''' Gray Training '''
+            if self.gray_train:
+                new_f_weights = self.gray_trainer.train(self.NightOutput, self.f_weight)
+                self.set_f_wight(new_f_weights)
 
             '''prepare for the next visit'''
             # update the episode status

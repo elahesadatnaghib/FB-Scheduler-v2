@@ -137,6 +137,8 @@ def eval_performance(episode_output, preferences):
     return p
 
 
+
+
 def calculate_F1(slew_t_to, filter, curr_filter):            # slew time cost 0~2
     normalized_slew = (slew_t_to /ephem.second) /5
     if filter == curr_filter:
