@@ -25,9 +25,9 @@ preferences     = [1,1,4,0,3,10]
 #P5: N_double *  1
 #P6: N_single * -1
 
-gray_train = False
-black_train= True
-custom_period = 0.1
+gray_train = True
+black_train= False
+custom_period = 0.3
 
 s       = time.time()
 
@@ -43,5 +43,6 @@ if black_train:
 
 elif gray_train:
     scheduler = FBDE.Scheduler(Date, Site, F_weight, gray_train, custom_period)
+    scheduler.schedule()
 
 print('Total elapsed time: {} sec'.format(time.time() - s))

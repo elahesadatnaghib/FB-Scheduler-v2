@@ -33,13 +33,13 @@ class GrayTrainer(object):
             if del_f < -0.1:
                 del_f_weight[i] = -0.1
 
-        #print(G0,G1,del_G,del_C,del_f_weight)
+        print(G0,G1,del_G,del_C,del_f_weight)
         return del_f_weight
 
     def eval_del_C(self, scheduler_out):
         len_output = len(scheduler_out)
         #print(scheduler_out[len_output - self.update_period:]['Cost'])
-        return np.sum(scheduler_out[len_output - self.update_period:]['Cost'])/10
+        return np.sum(scheduler_out[len_output - self.update_period:]['Cost'])/self.update_period
 
     def eval_sum_F(self, scheduler_out):
         len_output = len(scheduler_out)
