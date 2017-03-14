@@ -9,14 +9,14 @@ class GrayTrainer(object):
         self.update_period = 10
         self.learning_rate = 0.1
 
-    def train(self, scheduler_out, f_weight):
-        f_weight_cor = self.eval_new_f_weight(scheduler_out)
+    def train(self, scheduler_out, f_weight, preferences):
+        f_weight_cor = self.eval_new_f_weight(scheduler_out, preferences)
         new_f_weight = f_weight - f_weight_cor
         return new_f_weight
 
-    def eval_new_f_weight(self, scheduler_out):
-        G0 = eval_performance(scheduler_out[0:-self.update_period])
-        G1 = eval_performance(scheduler_out)
+    def eval_new_f_weight(self, scheduler_out, preferences):
+        G0 = eval_performance(scheduler_out[0:-self.update_period], preferences)
+        G1 = eval_performance(scheduler_out, preferences)
         del_G = G1 - G0
         del_C = self.eval_del_C(scheduler_out)
 

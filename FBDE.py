@@ -147,7 +147,7 @@ class DataFeed(object):
 ########################################################################################################################
 
 class Scheduler(DataFeed):
-    def __init__(self, date, site, f_weight, gray_train = False, custom_period = 0):
+    def __init__(self, date, site, f_weight, gray_train = False, custom_period = 0, preferences = [1,1,4,0,3,10]):
         super(Scheduler, self).__init__(date, site)
 
         # scheduler parameters
@@ -161,6 +161,7 @@ class Scheduler(DataFeed):
         # training
         self.gray_train = gray_train
         self.custom_period = custom_period
+        self.preferences   = preferences
 
     def schedule(self):
         self.episode.init_episode(self.fields, self.filters)  # Initialize scheduling
@@ -195,7 +196,7 @@ class Scheduler(DataFeed):
 
             ''' Gray Training '''
             if self.gray_train:
-                new_f_weights = self.gray_trainer.train(self.NightOutput, self.f_weight)
+                new_f_weights = self.gray_trainer.train(self.NightOutput, self.f_weight, self.preferences)
                 self.set_f_wight(new_f_weights)
 
             '''prepare for the next visit'''
