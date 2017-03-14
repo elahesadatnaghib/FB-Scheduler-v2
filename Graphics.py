@@ -357,7 +357,7 @@ def visualize(Date, PlotID = 1,FPS = 15,Steps = 20,MP4_quality = 300, Name = "LS
             writer.grab_frame()
 
 
-'''
+
 
 
 Site            = ephem.Observer()
@@ -367,19 +367,18 @@ Site.elevation  = 2650
 Site.pressure   = 0.
 Site.horizon    = 0.
 
-n_nights = 10 # number of the nights to be scheduled starting from 1st Jan. 2021
+n_nights = 1 # number of the nights to be scheduled starting from 1st Jan. 2021
 
-Date_start = ephem.Date('2015/6/28 12:00:00.00') # times are in UT
+Date_start = ephem.Date('2015/6/28 12:00:00.00') +9# times are in UT
 
 for i in range(n_nights):
     Date = ephem.Date(Date_start + i) # times are in UT
 
     # create animation
     FPS = 7            # Frame per second
-    Steps = 300          # Simulation steps
+    Steps = 500          # Simulation steps
     MP4_quality = 300   # MP4 size and quality
 
     PlotID = 1        # 1 for one Plot, 2 for including covering pattern
-    visualize(Date, PlotID ,FPS, Steps, MP4_quality, 'Visualizations/LSST1plot{}.mp4'.format(i + 1), showClouds= True)
+    visualize(Date, PlotID ,FPS, Steps, MP4_quality, 'Visualizations/LSST1plot{}.mp4'.format(9 + 1), showClouds= True)
 
-'''

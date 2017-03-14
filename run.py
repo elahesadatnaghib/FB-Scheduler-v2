@@ -21,8 +21,8 @@ Site.horizon    = 0.
 
 
 
-#F_weight        = [ 1.29964032,  9.83017599,  0.21240644,  6.3694487,   0.15822261,  1.11310888, 8.74563025] # learning result
-F_weight        = [1, 1, 1, 1, 1, 1, 1]
+F_weight        = [ 8.77911417,  9.03001744,  2.6651952,   2.4439927,   7.58606552,  0.09718976,  9.81205706] # learning result
+#F_weight        = [1, 1, 1, 1, 1, 1, 1]
 # F1: slew time cost 0~2
 # F2: night urgency -1~1
 # F3: overall urgency 0~1
@@ -53,7 +53,8 @@ for i in range(n_nights):
     scheduler.schedule()
     t2 = time.time()
     print('\nScheduling of the {} finished in {} sec'.format(Date, t2 - t1))
-
+    print(scheduler.eval_performance(1))
+'''
     # update the database
     Schedule = np.load("Output/Schedule{}.npy".format(i + 1))
     update(Schedule)
@@ -70,7 +71,7 @@ for i in range(n_nights):
     t4 = time.time()
     print('\nVisualization for {} created in {} sec'.format(Date, t4 - t3))
 
-
+'''
 
 print('\n \nTotal elapsed time: {} minutes'.format((time.time() - s)/60))
 

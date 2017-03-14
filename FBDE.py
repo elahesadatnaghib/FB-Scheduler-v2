@@ -156,8 +156,7 @@ class Scheduler(DataFeed):
         self.next_filter  = None
         self.filter_change= None
 
-        # scheduler trainer
-        trainer = Trainer()
+
 
 
     def schedule(self):
@@ -165,6 +164,8 @@ class Scheduler(DataFeed):
 
         self.episode.field.update_visit_var(self.t_start, self.episode.filter.name)
         self.reset_output()
+        # scheduler trainer
+        trainer = Trainer()
 
         while self.episode.t < self.episode.t_end:
             all_costs = np.zeros((self.n_fields,), dtype = [('u', np.float),('g', np.float),('r', np.float),('i', np.float),('z', np.float),('y', np.float)])
@@ -208,8 +209,8 @@ class Scheduler(DataFeed):
 
             ''' gray training '''
             self.set_f_wight(self.f_weight - trainer.train(self.NightOutput))
-
             print(self.f_weight)
+
         self.wrap_up()
 
     def reset_output(self):
@@ -248,7 +249,7 @@ class EpisodeStatus(object):
     def __init__(self, t_start, t_end, time_slots, exposure_t):
         # parameters constant during the current episode
         self.t_start    = t_start
-        self.t_end      = t_end
+        self.t_end      = t_end #- (t_end - t_start)/1.5
         self.episode_len= t_end - t_start # in days
         self.time_slots = time_slots
         self.n_t_slots  = len(time_slots)
@@ -562,7 +563,7 @@ class FilterState(object):
 class WatchData(object):
     def __init__(self, n_fields):
         self.n_fields = n_fields
-        self.steps_tp_save        = [0,10,11,12]
+        self.steps_tp_save        = [0,10,11,12,500]
         self.steps_tp_save_indx   = 0
         self.n_entries            = 8+48
         self.data_vec = np.zeros([self.n_fields +1, self.n_entries])
@@ -609,36 +610,43 @@ class WatchData(object):
 
 class Trainer(object):
     def __init__(self):
-        self.update_period = 10
-        self.learning_rate = 0.1
+        self.update_period = 50
+        self.learning_rate = 0.001
 
     def train(self, scheduler_out):
         f_weight_cor = self.eval_new_f_weight(scheduler_out)
         return f_weight_cor
 
     def eval_new_f_weight(self, scheduler_out):
-        G0 = eval_gain(scheduler_out[0:-self.update_period])
-        G1 = eval_gain(scheduler_out)
+        G0 = eval_performance(scheduler_out[0:-self.update_period], [1,1,4,0,3,10])
+        G1 = eval_performance(scheduler_out, [1,1,4,0,3,10])
         del_G = G1 - G0
+        if del_G < 0:
+            del_G = 0
+
         del_C = self.eval_del_C(scheduler_out)
 
         del_O = del_C - del_G
         sum_F = self.eval_sum_F(scheduler_out)
+        if del_G == 0:
+            del_f_weight = 0 * sum_F
+        else:
+            del_f_weight = del_O * sum_F * self.learning_rate
 
-        del_f_weight = del_O / sum_F
         for i,del_f in enumerate(del_f_weight):
-            if del_f > 0:
+            if del_f > 0.1:
                 del_f_weight[i] = 0.1
-            if del_f < 0:
+            if del_f < -0.1:
                 del_f_weight[i] = -0.1
 
-        print(G0,G1,del_G,del_C,del_f_weight)
-        return del_f_weight * self.learning_rate
+
+        #print(G0,G1,del_G,del_C,del_f_weight)
+        return del_f_weight
 
     def eval_del_C(self, scheduler_out):
         len_output = len(scheduler_out)
         #print(scheduler_out[len_output - self.update_period:]['Cost'])
-        return np.sum(scheduler_out[len_output - self.update_period:]['Cost'])
+        return np.sum(scheduler_out[len_output - self.update_period:]['Cost'])/10
 
     def eval_sum_F(self, scheduler_out):
         len_output = len(scheduler_out)

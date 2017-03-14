@@ -101,7 +101,7 @@ def eval_t_visit(t_decision, slew_t_to, filter_change, filter_change_t):
     else:
         return t_decision + slew_t_to
 
-def eval_performance(episode_output, preferences):
+def eval_performance_old(episode_output, preferences):
     t_start = episode_output[0]['ephemDate']
     t_end   = episode_output[-1]['ephemDate']
     duration = (t_end - t_start) /ephem.hour
@@ -358,7 +358,7 @@ def alt_allocation(alt, filter_name):
 
 
 
-def eval_gain(episode_output):
+def eval_performance(episode_output, pref):
 
     # non-linear
     u, c           = np.unique(episode_output['Field_id'], return_counts=True)
@@ -376,8 +376,12 @@ def eval_gain(episode_output):
     except:
         N_single    = 0
 
+    slew_sum = np.sum(episode_output['Slew_t'])
+    alt_sum  = np.sum(episode_output['Alt'])
+
     # objective function
-    g = 10* N_double - N_single
+    g = 10* N_double - 5*N_single + N_triple - slew_sum + alt_sum
+
     if g<0:
         g=0
 
