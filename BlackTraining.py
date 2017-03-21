@@ -1,7 +1,7 @@
 __author__ = 'Elahe'
 
 
-import MyDE
+import DEoptimizer as DE
 import FBDE
 
 
@@ -16,14 +16,17 @@ class BlackTraining():
         self.scheduler  = FBDE.Scheduler(Date, Site, F_weight, gray_train, custom_period)
         self.pref       = preferences
 
-    def DE_opt(self, N_p, F, Cr, maxIter, D, domain):
+    def DE_opt(self, N_p, F, Cr, maxIter, D, domain, gray_trianing = False):
         self.D               = D
         self.domain          = domain
-        self.optimizer       = MyDE.DE_optimizer(self, N_p, F, Cr, maxIter)
+        self.optimizer       = DE.DE_optimizer(self, N_p, F, Cr, maxIter, gray_training = gray_trianing)
 
     def target(self, x):
         self.scheduler.set_f_wight(x)
         self.scheduler.schedule()
         return -1 * self.scheduler.eval_performance(self.pref)
+
+    def refined_individual(self):
+        return self.scheduler.f_weight
 
 

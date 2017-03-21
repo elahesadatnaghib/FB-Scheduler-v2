@@ -15,7 +15,7 @@ from GrayTraining import GrayTrainer
 class DataFeed(object):
     def __init__(self, date, site, custom_episode = False):
         self.Site   = site
-
+        self.Date   = date
         self.night_id = int(date - ephem.Date('2015/6/28 12:00:00.00')) + 1
 
         # connecting to db

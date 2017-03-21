@@ -25,21 +25,21 @@ preferences     = [1,1,4,0,3,10]
 #P5: N_double *  1
 #P6: N_single * -1
 
-gray_train = True
-black_train= False
-custom_period = 0.3
+gray_train = False
+black_train= True
+custom_period = 0.1
 
 s       = time.time()
 
 if black_train:
-    N_p     = 20
+    N_p     = 100
     F       = 0.8
     Cr      = 0.8
     maxIter = 20
-    Domain  = np.array([[0,10], [0,10], [0,10], [0,10], [0,10], [0,10], [0,10]])
+    Domain  = np.array([[0,20], [0,20], [0,20], [0,20], [0,20], [0,20], [0,20]])
     D       = 7
     train   = BlackTraining(Date, Site, preferences, gray_train, custom_period)
-    train.DE_opt(N_p, F, Cr, maxIter, D, Domain)
+    train.DE_opt(N_p, F, Cr, maxIter, D, Domain, gray_trianing = gray_train)
 
 elif gray_train:
     scheduler = FBDE.Scheduler(Date, Site, F_weight, gray_train, custom_period)

@@ -6,14 +6,13 @@ from calculations import *
 class GrayTrainer(object):
     def __init__(self):
         self.update_period = 10
-        self.learning_rate = 0.001
+        self.learning_rate = 0.0001
 
     def train(self, scheduler_out, f_weight, preferences):
-        f_weight_cor = self.eval_new_f_weight(scheduler_out, preferences)
-        new_f_weight = f_weight - f_weight_cor
+        new_f_weight = self.eval_new_f_weight(scheduler_out, f_weight, preferences)
         return new_f_weight
 
-    def eval_new_f_weight(self, scheduler_out, preferences):
+    def eval_new_f_weight(self, scheduler_out, f_weight, preferences):
         G0 = eval_performance(scheduler_out[0:-self.update_period], preferences)
         G1 = eval_performance(scheduler_out, preferences)
         del_G = G1 - G0
@@ -27,14 +26,17 @@ class GrayTrainer(object):
             del_f_weight = 0 * sum_F
         else:
             del_f_weight = del_O * sum_F * self.learning_rate
-        for i,del_f in enumerate(del_f_weight):
-            if del_f > 0.1:
-                del_f_weight[i] = 0.1
-            if del_f < -0.1:
-                del_f_weight[i] = -0.1
 
-        print(G0,G1,del_G,del_C,del_f_weight)
-        return del_f_weight
+        for i,del_f in enumerate(del_f_weight):
+            if del_f > 0.1 * f_weight[i]:
+                del_f_weight[i] = 0.01 * f_weight[i]
+            if del_f < -0.1 * f_weight[i]:
+                del_f_weight[i] = -0.01 * f_weight[i]
+
+        new_f_weight = f_weight - del_f_weight
+
+        #print(G0,G1,del_G,del_C,new_f_weight)
+        return new_f_weight
 
     def eval_del_C(self, scheduler_out):
         len_output = len(scheduler_out)
