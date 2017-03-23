@@ -168,7 +168,7 @@ def visualize(Date, PlotID = 1,FPS = 15,Steps = 20,MP4_quality = 300, Name = "LS
     x, y = AltAz2XY(Alt,Az)
     S_Pole.set_data(x, y)
     ax.text(x+ .05, y, 'S-Pole', color = 'white', fontsize = 7)
-    DD_indicator = ax.text(-1.5,1.5, 'Deep Drilling Observation', color = 'red', fontsize = 9, visible = False)
+    DD_indicator = ax.text(-1.4,1.3, 'Deep Drilling Observation', color = 'red', fontsize = 9, visible = False)
 
     # Observed last night fields
     cur.execute('SELECT Field_id FROM Schedule WHERE ephemDate BETWEEN (?) AND (?)',(lastN_start, lastN_end))

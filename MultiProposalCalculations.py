@@ -46,9 +46,9 @@ def is_DD(field_id): #TODO temporarily just by id, later by label or location
 def DDsurvey_feasible(field):
     if field.n_ton_visits[0]['all'] >= 6: # with 6 visits in all filters, observation is done for the field
         return False
-    if field.N_visit> 0 and field.since_t_visit <= 1: # if field is observed last night, it's infeasible
+    if field.N_visit> 0 and field.since_t_visit <= 2: # if field is observed witgin two previous nights, it's infeasible
         return False
-    if field.t_to_invis < 6 * field.t_expo: # if there is not enough time to finish the DD observation
+    if field.t_to_invis < (6 - field.n_ton_visits['all']) * field.t_expo: # if there is not enough time to finish the DD observation
         return False
     return True
 

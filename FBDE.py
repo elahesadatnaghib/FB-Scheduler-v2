@@ -159,7 +159,6 @@ class Scheduler(DataFeed):
         self.episode.field.update_visit_var(self.t_start, self.episode.filter.name)
         self.reset_output()
 
-        flag = False
         while self.episode.t < self.episode.t_end:
             all_costs = np.zeros((self.n_fields,), dtype = [('u', np.float),('g', np.float),('r', np.float),('i', np.float),('z', np.float),('y', np.float)])
             for f in self.filters:
@@ -168,17 +167,11 @@ class Scheduler(DataFeed):
                 field.eval_feasibility()
                 all_costs[index] = field.eval_cost(self.f_weight, self.episode.filter.name, self.filters)
             winner_indx, winner_cost, winner_filter_index = decision_maker(all_costs)
-            if flag:
-                print(winner_cost, self.fields[last_DD].feasible, last_DD)
-                flag = False
             # decisions made for this visit
             self.next_field    = self.fields[winner_indx]
             self.next_filter   = self.filters[winner_filter_index]
             self.filter_change = (self.episode.filter != self.next_filter)
-            if winner_indx in [744-1, 2412-1, 1427-1, 2786-1, 290-1]:
-                last_DD = winner_indx
-                print(self.episode.step, winner_indx)
-                flag = True
+
             # evaluate time of the visit
             t_visit = eval_t_visit(self.episode.t, self.next_field.slew_t_to, self.filter_change, 2 * ephem.minute)
             # update visit variables of the next field
@@ -456,8 +449,8 @@ class FiledState(object): # an object of this class stores the information and s
             self.t_to_invis = -self.inf
         else:
             self.t_to_invis = self.t_setting - t
-            if self.t_to_invis < self.t_interval /2:
-                self.t_to_invis = 0
+            #if self.t_to_invis < self.t_interval /2 :
+            #    self.t_to_invis = 0
 
 
     def data_feed(self, all_moments_data, all_slew_to, model_param):
