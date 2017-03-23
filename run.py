@@ -61,8 +61,8 @@ for i in range(n_nights):
     print('\nDatabase for {} updated in {} sec'.format(Date, t3 - t2))
 
     # create animation
-    FPS = 10            # Frame per second
-    Steps = 100          # Simulation steps
+    FPS = 7            # Frame per second
+    Steps = 400          # Simulation steps
     MP4_quality = 300   # MP4 size and quality
 
     PlotID = 1        # 1 for one Plot, 2 for including covering pattern

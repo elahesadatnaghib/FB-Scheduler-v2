@@ -6,7 +6,6 @@ import matplotlib.animation as animation
 from matplotlib.patches import Circle
 import ephem
 import sqlite3 as lite
-from progressbar import ProgressBar
 from MultiProposalCalculations import *
 
 # Altitude and Azimuth of a single field at t (JD) in rad
@@ -69,10 +68,6 @@ def visualize(Date, PlotID = 1,FPS = 15,Steps = 20,MP4_quality = 300, Name = "LS
     FFMpegWriter = animation.writers['ffmpeg']
     metadata = dict(title='LSST Simulation', artist='Elahe', comment='Test')
     writer = FFMpegWriter(fps=FPS, metadata=metadata)
-
-    #Progress bar initialization
-
-    pbar = ProgressBar()
 
     # Initialize plot
     Fig = plt.figure()
@@ -200,7 +195,7 @@ def visualize(Date, PlotID = 1,FPS = 15,Steps = 20,MP4_quality = 300, Name = "LS
 
 
     with writer.saving(Fig, Name, MP4_quality) :
-        for t in pbar(np.linspace(t_start, t_end, num = Steps)):
+        for t in np.linspace(t_start, t_end, num = Steps):
 
 
             # Find the index of the current time
@@ -340,7 +335,7 @@ def visualize(Date, PlotID = 1,FPS = 15,Steps = 20,MP4_quality = 300, Name = "LS
                 covering.set_data(All_Fields[0], tot)
 
             #Update indicators of the proposal
-            if is_DD(F2[visit_index]):
+            if is_DD(F2[time_index]):
                 DD_indicator.set_visible(True)
             else:
                 DD_indicator.set_visible(False)
@@ -368,7 +363,7 @@ def visualize(Date, PlotID = 1,FPS = 15,Steps = 20,MP4_quality = 300, Name = "LS
 
 
 
-
+'''
 
 Site            = ephem.Observer()
 Site.lon        = -1.2320792
@@ -385,10 +380,11 @@ for i in range(n_nights):
     Date = ephem.Date(Date_start + i) # times are in UT
 
     # create animation
-    FPS = 10            # Frame per second
-    Steps = 100          # Simulation steps
+    FPS = 7            # Frame per second
+    Steps = 400          # Simulation steps
     MP4_quality = 300   # MP4 size and quality
 
     PlotID = 1        # 1 for one Plot, 2 for including covering pattern
     visualize(Date, PlotID ,FPS, Steps, MP4_quality, 'Visualizations/LSST1plot{}.mp4'.format(i + 1), showClouds= True)
 
+'''
