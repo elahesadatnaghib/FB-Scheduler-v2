@@ -7,6 +7,7 @@ from matplotlib.patches import Circle
 import ephem
 import sqlite3 as lite
 from progressbar import ProgressBar
+from MultiProposalCalculations import *
 
 # Altitude and Azimuth of a single field at t (JD) in rad
 def Fields_local_coordinate(Field_ra, Field_dec, t, Site):
@@ -172,6 +173,7 @@ def visualize(Date, PlotID = 1,FPS = 15,Steps = 20,MP4_quality = 300, Name = "LS
     x, y = AltAz2XY(Alt,Az)
     S_Pole.set_data(x, y)
     ax.text(x+ .05, y, 'S-Pole', color = 'white', fontsize = 7)
+    DD_indicator = ax.text(-1.5,1.5, 'Deep Drilling Observation', color = 'red', fontsize = 9, visible = False)
 
     # Observed last night fields
     cur.execute('SELECT Field_id FROM Schedule WHERE ephemDate BETWEEN (?) AND (?)',(lastN_start, lastN_end))
@@ -294,6 +296,7 @@ def visualize(Date, PlotID = 1,FPS = 15,Steps = 20,MP4_quality = 300, Name = "LS
 
             ToN_History_line.set_data([F2_X[0:visit_index], F2_Y[0:visit_index]])
             last_10_History_line.set_data([F2_X[visit_index - 10: visit_index], F2_Y[visit_index - 10: visit_index]])
+
             # telescope position and color
             LSST.set_data([F2_X[visit_index],F2_Y[visit_index]])
             if visit_filter == 'u':
@@ -336,6 +339,13 @@ def visualize(Date, PlotID = 1,FPS = 15,Steps = 20,MP4_quality = 300, Name = "LS
                 current_cover.set_data(visited_field -1,tot[visited_field -1])
                 covering.set_data(All_Fields[0], tot)
 
+            #Update indicators of the proposal
+            if is_DD(F2[visit_index]):
+                DD_indicator.set_visible(True)
+            else:
+                DD_indicator.set_visible(False)
+
+
             #Observation statistics
             leg = plt.legend([Observed_lastN, Obseved_toN],
                        ['Visited last night', time_index])
@@ -359,7 +369,7 @@ def visualize(Date, PlotID = 1,FPS = 15,Steps = 20,MP4_quality = 300, Name = "LS
 
 
 
-'''
+
 Site            = ephem.Observer()
 Site.lon        = -1.2320792
 Site.lat        = -0.517781017
@@ -367,7 +377,7 @@ Site.elevation  = 2650
 Site.pressure   = 0.
 Site.horizon    = 0.
 
-n_nights = 3 # number of the nights to be scheduled starting from 1st Jan. 2021
+n_nights = 1 # number of the nights to be scheduled starting from 1st Jan. 2021
 
 Date_start = ephem.Date('2015/6/28 12:00:00.00') # times are in UT
 
@@ -382,4 +392,3 @@ for i in range(n_nights):
     PlotID = 1        # 1 for one Plot, 2 for including covering pattern
     visualize(Date, PlotID ,FPS, Steps, MP4_quality, 'Visualizations/LSST1plot{}.mp4'.format(i + 1), showClouds= True)
 
-'''

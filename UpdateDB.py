@@ -175,6 +175,7 @@ def update(Schedule):
         Coadded_depth     = previous_Coadded_depth + 0 # temporarily
         Avg_cost          = ((previous_Avg_cost * previous_N_visit) + Schedule[index]['Cost'])/N_visit
         Avg_slew_t        = ((previous_Avg_slew_t * previous_N_visit) + Schedule[index]['Slew_t'])/N_visit
+        Avg_slew_t        = Avg_slew_t/ephem.second
         Avg_alt           = ((previous_Avg_alt * previous_N_visit) + Schedule[index]['Alt'])/N_visit
         Avg_ha            = ((previous_Avg_ha * previous_N_visit) + Schedule[index]['HA'])/N_visit
 
@@ -203,7 +204,7 @@ def update(Schedule):
                         'Avg_ha            = ? WHERE ID = ?',
                         (Fourth_last_visit, Third_last_visit, Second_last_visit, Last_visit, N_visit, Last_visit_u, N_visit_u,
                          Last_visit_g, N_visit_g, Last_visit_r, N_visit_r, Last_visit_i, N_visit_i, Last_visit_z, N_visit_z,
-                         Last_visit_y, N_visit_y, Coadded_depth, Avg_cost, Avg_slew_t/ephem.second, Avg_alt, Avg_ha, id))
+                         Last_visit_y, N_visit_y, Coadded_depth, Avg_cost, Avg_slew_t, Avg_alt, Avg_ha, id))
 
     ''' update the Filter Statistics db'''
     filters = ['u', 'g', 'r', 'i', 'z', 'y']

@@ -3,7 +3,9 @@ __author__ = 'Elahe'
 import numpy as np
 import ephem
 from operator import attrgetter
+from MultiProposalCalculations import *
 
+sciences = ["WFD", "DD", "GP", "NE", "SE"]
 
 def eval_init_state(fields, suggestion, manual = False):        # TODO Feasibility of the initial field needs to be checked
     if manual:
@@ -18,36 +20,34 @@ def eval_init_filter(filters):
     return filters[0]
 
 def eval_feasibility(field):
-    if not field.visible:
+    if not basic_feasible(field):
         return False
-    elif field.n_ton_visits[0]['all'] >= field.max_n_night:
-        return False
-    #elif field.n_ton_visits[0]['all'] == 1 and field.since_t_last_visit[0]['all'] < field.visit_w[0]:
-    elif field.n_ton_visits[0]['all'] != 0 and field.since_t_last_visit[0]['all'] < field.visit_w[0]:
-        return False
-    #elif field.n_ton_visits[0]['all'] == 1 and field.since_t_last_visit[0]['all'] > field.visit_w[1]:
-    elif field.n_ton_visits[0]['all'] != 0 and field.since_t_last_visit[0]['all'] > field.visit_w[1]:
-        return False
-    elif field.covered:
-        return False
-    if field.slew_t_to > 5 *ephem.second and field.since_t_last_visit[0]['all'] != field.inf:
-        return False
-    if field.covered:
-        return False
+    science = detect_science(field)
+    if science == "WFD":
+        if not universalsurvey_feasible(field):
+            return False
+    elif science == "DD":
+        if not DDsurvey_feasible(field):
+            return False
     return True
 
-def eval_feasibility_filter(filter, current_filter):
-    if  (filter.name != current_filter.name) and current_filter.n_current_batch <= 30:
-        return False
-
+def eval_feasibility_filter(filter, current_filter, current_field):
+    science = detect_science(current_field)
+    if science == "WFD":
+        if not universalsurvey_filter_feasible(filter, current_filter):
+            return False
+    elif science == "DD":
+        if not DDsurvey_filter_feasible(filter, current_field):
+            return False
     return True
 
 def eval_basis_fcn(field, curr_filter_name, filters):
     F    = np.zeros(7, dtype = [('u', np.float),('g', np.float),('r', np.float),('i', np.float),('z', np.float),('y', np.float)])  # 7 is the number of basis functions
+    science = detect_science(field)
     for f in filters:
         if f.feasible:
             F[0][f.name] = calculate_F1(field.slew_t_to, f.name, curr_filter_name)
-            F[1][f.name] = calculate_F2(field.since_t_last_visit[0][f.name], field.n_ton_visits[0][f.name], field.t_to_invis, field.inf)
+            F[1][f.name] = calculate_F2(field.since_t_last_visit[0][f.name], field.n_ton_visits[0][f.name], field.t_to_invis, field.inf, science, field.n_ton_visits[0]['all'])
             F[2][f.name] = calculate_F3(filters, f.name)
             F[3][f.name] = calculate_F4(field.alt, f.name)
             F[4][f.name] = calculate_F5(field.ha, f.name)
@@ -144,7 +144,9 @@ def calculate_F1(slew_t_to, filter, curr_filter):            # slew time cost 0~
     else:
         return normalized_slew + 4 # count for filter change time cost
 
-def calculate_F2(since_t_last_visit, n_ton_visits, t_to_invis, inf):   # night urgency 0~10
+def calculate_F2(since_t_last_visit, n_ton_visits, t_to_invis, inf, science, n_ton_visits_all):   # night urgency 0~10
+    if science == "DD" and n_ton_visits_all > 0:
+        return -inf
     if since_t_last_visit == inf:
         filter_indep =  5
     if n_ton_visits == 2:
@@ -173,7 +175,7 @@ def calculate_F4(alt, filter_name):              # altitude cost 0~1
 def calculate_F5(ha, filter):               # hour angle cost 0~1
     return np.abs(ha)
 
-def calculate_F6(N_visit_tot, Max_N_visit, N_visit_filter, Max_N_visit_filter):                  # overall urgency 0~2
+def calculate_F6(N_visit_tot, Max_N_visit, N_visit_filter, Max_N_visit_filter):   # overall urgency 0~2
     return float(N_visit_tot)/(Max_N_visit +1) + float(N_visit_filter)/(Max_N_visit_filter +1)  # normalized n_visit +1 to make sure won't have division by 0
 
 def calculate_F7(brightness, moonsep, filter_name):       # normalized brightness 0~1 #TODO has to go to the constraints
@@ -354,3 +356,5 @@ def alt_allocation(alt, filter_name):
     if n_alt < 0.45:
         n_alt = 0.45
     return 100*np.square(n_alt-traps[index]) + ((1./(1-np.cos(alt))) -1) * 5
+
+
