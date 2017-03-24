@@ -190,6 +190,13 @@ class Scheduler(DataFeed):
             self.episode.set_fields(self.fields, self.next_field)
             # update all filters
             self.episode.set_filter(self.filters, self.next_filter)
+
+            ''' show progress '''
+            progress = float(self.episode.t - self.episode.t_start)/(self.episode.t_end- self.episode.t_start)*100
+            text = "\rprogress = %.1f%%" % progress
+            sys.stdout.write(text)
+            sys.stdout.flush()
+
         self.wrap_up()
 
     def reset_output(self):

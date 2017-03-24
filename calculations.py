@@ -51,7 +51,7 @@ def eval_basis_fcn(field, curr_filter_name, filters):
             F[2][f.name] = calculate_F3(filters, f.name)
             F[3][f.name] = calculate_F4(field.alt, f.name)
             F[4][f.name] = calculate_F5(field.ha, f.name)
-            F[5][f.name] = calculate_F6(field.N_visit['all'][0], field.Max_N_visit['all'], field.N_visit[0][f.name], field.Max_N_visit[0][f.name])
+            F[5][f.name] = calculate_F6(field.N_visit['all'][0], field.Max_N_visit['all'], field.N_visit[0][f.name], field.Max_N_visit[0][f.name], science)
             F[6][f.name] = calculate_F7(field.brightness,field.moonsep, f.name)
         else:
             F[0][f.name] = None
@@ -145,8 +145,9 @@ def calculate_F1(slew_t_to, filter, curr_filter):            # slew time cost 0~
         return normalized_slew + 4 # count for filter change time cost
 
 def calculate_F2(since_t_last_visit, n_ton_visits, t_to_invis, inf, science, n_ton_visits_all):   # night urgency 0~10
-    if science == "DD" and n_ton_visits_all > 0:
-        return -inf
+    if science == "DD":
+        if n_ton_visits_all > 0: # so the next observation would be on the same DD field
+            return -inf
     if since_t_last_visit == inf:
         filter_indep =  5
     if n_ton_visits == 2:
@@ -175,7 +176,10 @@ def calculate_F4(alt, filter_name):              # altitude cost 0~1
 def calculate_F5(ha, filter):               # hour angle cost 0~1
     return np.abs(ha)
 
-def calculate_F6(N_visit_tot, Max_N_visit, N_visit_filter, Max_N_visit_filter):   # overall urgency 0~2
+def calculate_F6(N_visit_tot, Max_N_visit, N_visit_filter, Max_N_visit_filter, science):   # overall urgency 0~2
+    if science == 'DD':
+        if N_visit_tot % 6 != 0: #we need to complete the previous night's DD observation
+            return 0
     return float(N_visit_tot)/(Max_N_visit +1) + float(N_visit_filter)/(Max_N_visit_filter +1)  # normalized n_visit +1 to make sure won't have division by 0
 
 def calculate_F7(brightness, moonsep, filter_name):       # normalized brightness 0~1 #TODO has to go to the constraints

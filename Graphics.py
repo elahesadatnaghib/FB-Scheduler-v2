@@ -361,9 +361,9 @@ def visualize(Date, PlotID = 1,FPS = 15,Steps = 20,MP4_quality = 300, Name = "LS
             #Save current frame
             writer.grab_frame()
 
-
-
 '''
+
+
 
 Site            = ephem.Observer()
 Site.lon        = -1.2320792
@@ -380,8 +380,8 @@ for i in range(n_nights):
     Date = ephem.Date(Date_start + i) # times are in UT
 
     # create animation
-    FPS = 7            # Frame per second
-    Steps = 400          # Simulation steps
+    FPS = 5            # Frame per second
+    Steps = 100          # Simulation steps
     MP4_quality = 300   # MP4 size and quality
 
     PlotID = 1        # 1 for one Plot, 2 for including covering pattern
