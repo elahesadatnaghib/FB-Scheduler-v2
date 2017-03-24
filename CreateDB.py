@@ -50,6 +50,7 @@ def creatFBDE():
                 'T_end REAL, '
                 'Initial_field, '
                 'N_visits INTEGER, '
+                'N_DDcosmology INTEGER,'
                 'N_triple INTEGER, '
                 'N_double INTEGER, '
                 'N_single INTEGER, '

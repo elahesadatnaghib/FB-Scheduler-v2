@@ -17,7 +17,7 @@ def eval_init_state(fields, suggestion, manual = False):        # TODO Feasibili
         return fields[winner_index]
 
 def eval_init_filter(filters):
-    return filters[0]
+    return filters[3]
 
 def eval_feasibility(field):
     if not basic_feasible(field):
@@ -142,22 +142,13 @@ def calculate_F1(slew_t_to, filter, curr_filter):            # slew time cost 0~
     if filter == curr_filter:
         return normalized_slew
     else:
-        return normalized_slew + 4 # count for filter change time cost
+        return normalized_slew + 5 # count for filter change time cost
 
 def calculate_F2(since_t_last_visit, n_ton_visits, t_to_invis, inf, science, n_ton_visits_all):   # night urgency 0~10
     if science == "DD":
-        if n_ton_visits_all > 0: # so the next observation would be on the same DD field
-            return -inf
-    if since_t_last_visit == inf:
-        filter_indep =  5
-    if n_ton_visits == 2:
-        filter_indep = 10
-    elif n_ton_visits == 1:
-        if t_to_invis < 30 * ephem.minute:
-            filter_indep =  0
-        else:
-            filter_indep = 5 * (1 - np.exp(-1* since_t_last_visit / 20 * ephem.minute))
-    return filter_indep
+        return calculate_F2_DD(since_t_last_visit, n_ton_visits, t_to_invis, n_ton_visits_all, inf)
+    if science == "WFD":
+        return calculate_F2_WFD(since_t_last_visit, n_ton_visits, t_to_invis, inf)
 
 def calculate_F3(filters, f_name):       # filter urgency 0~1
     index = ['u','g','r','i','z','y'].index(f_name)
@@ -178,9 +169,9 @@ def calculate_F5(ha, filter):               # hour angle cost 0~1
 
 def calculate_F6(N_visit_tot, Max_N_visit, N_visit_filter, Max_N_visit_filter, science):   # overall urgency 0~2
     if science == 'DD':
-        if N_visit_tot % 6 != 0: #we need to complete the previous night's DD observation
-            return 0
-    return float(N_visit_tot)/(Max_N_visit +1) + float(N_visit_filter)/(Max_N_visit_filter +1)  # normalized n_visit +1 to make sure won't have division by 0
+        return calculate_F6_DD(N_visit_tot, Max_N_visit, N_visit_filter, Max_N_visit_filter)
+    if science == 'WFD':
+        return calculate_F6_WFD(N_visit_tot, Max_N_visit, N_visit_filter, Max_N_visit_filter)
 
 def calculate_F7(brightness, moonsep, filter_name):       # normalized brightness 0~1 #TODO has to go to the constraints
     if moonsep < np.deg2rad(25) and filter_name == 'u':
@@ -196,7 +187,6 @@ def calculate_F7(brightness, moonsep, filter_name):       # normalized brightnes
     if moonsep < np.deg2rad(0) and filter_name == 'y':
         return 1e10
     return brightness
-
 
 
 # miscellaneous

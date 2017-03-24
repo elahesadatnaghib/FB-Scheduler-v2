@@ -33,7 +33,7 @@ F_weight        = [1, 1, 1, 1, 1, 1, 1]
 
 
 
-n_nights = 2 # number of the nights to be scheduled starting from 1st Jan. 2021
+n_nights = 3 # number of the nights to be scheduled starting from 1st Jan. 2021
 
 s = time.time()
 

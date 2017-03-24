@@ -8,6 +8,7 @@ from numpy import *
 import sqlite3 as lite
 from calculations import *
 import pandas as pd
+import sys
 
 
 class DataFeed(object):
@@ -171,6 +172,8 @@ class Scheduler(DataFeed):
             self.next_field    = self.fields[winner_indx]
             self.next_filter   = self.filters[winner_filter_index]
             self.filter_change = (self.episode.filter != self.next_filter)
+            if self.filter_change:
+                print('\nfiltercheck');print(self.next_field.F[0], self.episode.filter.name, self.next_filter.name)
 
             # evaluate time of the visit
             t_visit = eval_t_visit(self.episode.t, self.next_field.slew_t_to, self.filter_change, 2 * ephem.minute)
@@ -180,6 +183,8 @@ class Scheduler(DataFeed):
             self.next_filter.update_visit_var(t_visit, self.episode.step)
             # record visit
             self.record_visit()
+            if self.next_field.id == 744:
+                print(self.NightOutput[-1])
 
 
             '''prepare for the next visit'''
@@ -215,7 +220,7 @@ class Scheduler(DataFeed):
         self.op_log.write(json.dumps(entry1.tolist())+"\n")
 
     def record_visit(self):
-        entry = record_assistant(self.next_field, self.episode.t, self.episode.filter.name, self.output_dtype)
+        entry = record_assistant(self.next_field, self.episode.t, self.next_filter.name, self.output_dtype)
         self.NightOutput = np.append(self.NightOutput, entry)
         self.op_log.write(json.dumps(entry.tolist())+"\n")
 

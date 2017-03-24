@@ -16,7 +16,7 @@ def update(Schedule):
     t_end   = Schedule[-1]['ephemDate']
 
     N_visits = np.count_nonzero(Schedule['Field_id'])
-
+    N_DD     = 0  # number of deep drilling observations
 
 
     ''' Update the SCHEDULE db'''
@@ -57,7 +57,12 @@ def update(Schedule):
                               t_since_v_ton, t_since_v_last, Alt, HA, t_to_invis, Sky_bri, Temp_coverage,
                               F1, F2, F3, F4, F5, F6, F7))
 
-
+        #detect deep drilling observation to be reflected in NightSummary
+        try:
+            if Field_id == Schedule[index+ 1]['Field_id'] and Field_id == Schedule[index+ 2]['Field_id']:
+                N_DD += 3
+        except:
+            pass
     ''' Update the NIGHT SUMMARY db'''
     # Import last row of the data base
     try:
@@ -92,8 +97,9 @@ def update(Schedule):
     Avg_alt     = np.average(Schedule['Alt'])
     Avg_ha      = np.average(Schedule['HA'])
 
-    cur.execute('INSERT INTO NightSummary VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
-                    (Night_count, t_start, t_end,  Initial_field, N_visits, N_triple, N_double,
+
+    cur.execute('INSERT INTO NightSummary VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
+                    (Night_count, t_start, t_end,  Initial_field, N_visits, N_DD, N_triple, N_double,
                      N_single, N_per_hour, Avg_cost, Avg_slew_t/ephem.second, Avg_alt, Avg_ha))
 
 
