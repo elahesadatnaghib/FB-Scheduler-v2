@@ -37,12 +37,11 @@ def AltAz2XY(Alt, Az) :
 
     return Y, -1*X
 
-
 def visualize(Date, PlotID = 1,FPS = 15,Steps = 20,MP4_quality = 300, Name = "LSST Scheduler Simulator.mp4", showClouds = False):
 
     # Import data
-    All_Fields = np.loadtxt("NightDataInLIS/Constants/UnlabelledFields.lis", unpack = True)
-    N_Fields   = len(All_Fields[0])
+    All_Fields = np.loadtxt("NightDataInLIS/Constants/fieldID.lis", dtype = "i4, f8, f8, S10")
+    N_Fields   = len(All_Fields)
 
     Site            = ephem.Observer()
     Site.lon        = -1.2320792
@@ -76,17 +75,21 @@ def visualize(Date, PlotID = 1,FPS = 15,Steps = 20,MP4_quality = 300, Name = "LS
     if PlotID == 2:
         ax = plt.subplot(211, axisbg = 'black')
 
-    unobserved, Observed_lastN, Obseved_toN,\
+
+    unobserved, Observed_lastN,\
+    WFD, GP, NE, SE, DD,\
+    Obseved_toN,\
     ToN_History_line,\
     uu,gg,rr,ii,zz,yy,\
     last_10_History_line,\
     Horizon, airmass_horizon, S_Pole,\
     LSST,\
     Clouds\
-        = ax.plot([], [], '*',[], [], '*',[], [], '*',
+        = ax.plot([], [], '*',[], [], '*',
+                  [], [], '*',[], [], '*',[], [], '*', [], [], '*', [], [], '*', # proposals
                   [], [], '*',
-                  [], [], '*',[], [], '*',[], [], '*',
-                  [], [], '*',[], [], '*',[], [], '*',
+                  [], [], '*',
+                  [], [], '*',[], [], '*',[], [], '*', [], [], '*',[], [], '*',[], [], '*', #filters
                   [], [], '-',
                   [], [], '-',[], [], '-',[], [], 'D',
                   [], [], 'o',
@@ -107,14 +110,24 @@ def visualize(Date, PlotID = 1,FPS = 15,Steps = 20,MP4_quality = 300, Name = "LS
     Observed_lastN.set_color('blue');       Observed_lastN.set_markersize(star_size)
     Obseved_toN.set_color('chartreuse');    Obseved_toN.set_markersize(0)
 
+    # filters
     uu.set_color('purple'); gg.set_color('green'); rr.set_color('red')
     ii.set_color('orange'); zz.set_color('pink');   yy.set_color('deeppink')
 
-    Clouds.set_color('white');              Clouds.set_markersize(10);
+    # clouds
+    Clouds.set_color('white');              Clouds.set_markersize(10)
     Clouds.set_alpha(0.2);                  Clouds.set_markeredgecolor(None)
 
     ToN_History_line.set_color('orange');   ToN_History_line.set_lw(.5)
     last_10_History_line.set_color('gray');  last_10_History_line.set_lw(.5)
+
+    # proposal
+    # s
+    WFD.set_color('dimgray');               #WFD.set_alpha(0.3)
+    SE.set_color('green');                  #SE.set_alpha(0.3)
+    NE.set_color('blue');                   #NE.set_alpha(0.3)
+    GP.set_color('red');                    #GP.set_alpha(0.3)
+    #DD.set_color('black');                 #DD.set_alpha(0.3); DD.set_markersize(7)
 
     LSST.set_color('red'); LSST.set_markersize(8)
 
@@ -129,7 +142,7 @@ def visualize(Date, PlotID = 1,FPS = 15,Steps = 20,MP4_quality = 300, Name = "LS
         Fourth_last_visit = [x[4] for x in row]
 
         initHistoricalcoverage = N_visit
-        for index, id in enumerate(All_Fields):
+        for index, id in enumerate(All_Fields[:,0]):
             if Last_visit[index] > toN_start:
                 initHistoricalcoverage[index] -= 1
                 if Second_last_visit[index] > toN_start:
@@ -139,7 +152,7 @@ def visualize(Date, PlotID = 1,FPS = 15,Steps = 20,MP4_quality = 300, Name = "LS
 
 
 
-        covering,current_cover = freqAX.plot(All_Fields[0],initHistoricalcoverage,'-',[],[],'o')
+        covering, current_cover = freqAX.plot(All_Fields[:,0],initHistoricalcoverage,'-',[],[],'o')
 
         freqAX.set_xlim(0,N_Fields)
         freqAX.set_ylim(0,np.max(initHistoricalcoverage)+5)
@@ -217,17 +230,20 @@ def visualize(Date, PlotID = 1,FPS = 15,Steps = 20,MP4_quality = 300, Name = "LS
             F1_X = []; F1_Y = []; F2_X = []; F2_Y = []; F3_X = []; F3_Y = []; F4_X = []; F4_Y = []
             # Filter coloring for tonight observation
             U_X = []; U_Y = []; G_X = []; G_Y = []; R_X = []; R_Y = []; I_X = []; I_Y = []; Z_X = []; Z_Y = []; Y_X = []; Y_Y = []
+            # Coloring different proposals
+            WFD_X = []; WFD_Y = []; NE_X = []; NE_Y = []; SE_X = []; SE_Y = []; GP_X = []; GP_Y = []; DD_X = []; DD_Y = []
+
 
             # F1  coordinate:
             for i in F1:
-                Alt, Az = Fields_local_coordinate(All_Fields[1,i-1], All_Fields[2,i-1], t, Site)
+                Alt, Az = Fields_local_coordinate(All_Fields[i-1][1], All_Fields[i-1][2], t, Site)
                 if Alt > 0:
                     X, Y    = AltAz2XY(Alt,Az)
                     F1_X.append(X); F1_Y.append(Y)
 
             # F2  coordinate:
             for i,tau,filter in zip(F2, F2_timing, F2_filtering):
-                Alt, Az = Fields_local_coordinate(All_Fields[1,i-1], All_Fields[2,i-1], t, Site)
+                Alt, Az = Fields_local_coordinate(All_Fields[i-1][1], All_Fields[i-1][2], t, Site)
                 if Alt > 0:
                     X, Y    = AltAz2XY(Alt,Az)
                     F2_X.append(X); F2_Y.append(Y)
@@ -264,17 +280,26 @@ def visualize(Date, PlotID = 1,FPS = 15,Steps = 20,MP4_quality = 300, Name = "LS
 
             # F3  coordinate:
             for i in range(0,N_Fields):
-                if True:
-                    Alt, Az = Fields_local_coordinate(All_Fields[1,i], All_Fields[2,i], t, Site)
-                    if Alt > 0:
-                        X, Y    = AltAz2XY(Alt,Az)
-                        F3_X.append(X); F3_Y.append(Y)
+                Alt, Az = Fields_local_coordinate(All_Fields[i][1], All_Fields[i][2], t, Site)
+                if Alt > 0:
+                    X, Y    = AltAz2XY(Alt,Az)
+                    F3_X.append(X); F3_Y.append(Y)
+                    if All_Fields[i][3] == 'DD':
+                        DD_X.append(X); DD_Y.append(Y)
+                    elif All_Fields[i][3] == 'WFD':
+                        WFD_X.append(X); WFD_Y.append(Y)
+                    elif All_Fields[i][3] == 'GP':
+                        GP_X.append(X); GP_Y.append(Y)
+                    elif All_Fields[i][3] == 'NES':
+                        NE_X.append(X); NE_Y.append(Y)
+                    elif All_Fields[i][3] == 'SCP':
+                        SE_X.append(X); SE_Y.append(Y)
 
             # F4 coordinates
             if showClouds:
                 for i in range(0,N_Fields):
-                    if All_Cloud_cover[Slot_n,i] == 2 or All_Cloud_cover[Slot_n,i] == 1 or All_Cloud_cover[Slot_n,i] == -1:
-                        Alt, Az = Fields_local_coordinate(All_Fields[1,i], All_Fields[2,i], t, Site)
+                    if All_Cloud_cover[Slot_n,i] == -1 or All_Cloud_cover[Slot_n,i] == 1:# or All_Cloud_cover[Slot_n,i] == 2:
+                        Alt, Az = Fields_local_coordinate(All_Fields[i][1], All_Fields[i][2], t, Site)
                     if Alt > 0:
                         X, Y    = AltAz2XY(Alt,Az)
                         F4_X.append(X); F4_Y.append(Y)
@@ -285,12 +310,17 @@ def visualize(Date, PlotID = 1,FPS = 15,Steps = 20,MP4_quality = 300, Name = "LS
             Observed_lastN.set_data([F1_X,F1_Y])
             Obseved_toN.set_data([F2_X[0:visit_index],F2_Y[0:visit_index]])
 
+            # filters
             uu.set_data([U_X[0:visit_index_u],U_Y[0:visit_index_u]]); gg.set_data([G_X[0:visit_index_g],G_Y[0:visit_index_g]])
             rr.set_data([R_X[0:visit_index_r],R_Y[0:visit_index_r]]); ii.set_data([I_X[0:visit_index_i],I_Y[0:visit_index_i]])
             zz.set_data([Z_X[0:visit_index_z],Z_Y[0:visit_index_z]]); yy.set_data([Y_X[0:visit_index_y],Y_Y[0:visit_index_y]])
 
             ToN_History_line.set_data([F2_X[0:visit_index], F2_Y[0:visit_index]])
             last_10_History_line.set_data([F2_X[visit_index - 10: visit_index], F2_Y[visit_index - 10: visit_index]])
+
+            # proposals
+            WFD.set_data([WFD_X, WFD_Y]); DD.set_data([DD_X,DD_Y]); NE.set_data([NE_X, NE_Y]); SE.set_data([SE_X, SE_Y])
+            GP.set_data([GP_X, GP_Y])
 
             # telescope position and color
             LSST.set_data([F2_X[visit_index],F2_Y[visit_index]])
@@ -332,7 +362,7 @@ def visualize(Date, PlotID = 1,FPS = 15,Steps = 20,MP4_quality = 300, Name = "LS
                         break
                 tot = Historicalcoverage + initHistoricalcoverage
                 current_cover.set_data(visited_field -1,tot[visited_field -1])
-                covering.set_data(All_Fields[0], tot)
+                covering.set_data(All_Fields[:,0], tot)
 
             #Update indicators of the proposal
             if is_DD(F2[time_index]):
@@ -361,7 +391,7 @@ def visualize(Date, PlotID = 1,FPS = 15,Steps = 20,MP4_quality = 300, Name = "LS
             #Save current frame
             writer.grab_frame()
 
-'''
+
 
 
 
@@ -377,14 +407,13 @@ n_nights = 1 # number of the nights to be scheduled starting from 1st Jan. 2021
 Date_start = ephem.Date('2015/6/28 12:00:00.00') # times are in UT
 
 for i in range(n_nights):
-    Date = ephem.Date(Date_start + i) # times are in UT
+    Date = ephem.Date(Date_start + i) +2# times are in UT
 
     # create animation
-    FPS = 5            # Frame per second
-    Steps = 100          # Simulation steps
+    FPS = 10            # Frame per second
+    Steps = 50          # Simulation steps
     MP4_quality = 300   # MP4 size and quality
 
     PlotID = 1        # 1 for one Plot, 2 for including covering pattern
-    visualize(Date, PlotID ,FPS, Steps, MP4_quality, 'Visualizations/LSST1plot{}.mp4'.format(i + 1), showClouds= True)
+    visualize(Date, PlotID ,FPS, Steps, MP4_quality, 'Visualizations/LSST1plot_testtest{}.mp4'.format(i + 1), showClouds= True)
 
-'''

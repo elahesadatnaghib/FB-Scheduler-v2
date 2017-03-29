@@ -51,7 +51,7 @@ def eval_basis_fcn(field, curr_filter_name, filters):
             F[2][f.name] = calculate_F3(filters, f.name)
             F[3][f.name] = calculate_F4(field.alt, f.name)
             F[4][f.name] = calculate_F5(field.ha, f.name)
-            F[5][f.name] = calculate_F6(field.N_visit['all'][0], field.Max_N_visit['all'], field.N_visit[0][f.name], field.Max_N_visit[0][f.name], science)
+            F[5][f.name] = calculate_F6(field.N_visit['all'][0], field.Max_N_visit['all'], field.N_visit[0][f.name], field.Max_N_visit[0][f.name], science, field.inf)
             F[6][f.name] = calculate_F7(field.brightness,field.moonsep, f.name)
         else:
             F[0][f.name] = None
@@ -73,7 +73,7 @@ def eval_cost(F, f_weight, filters):
     return c
 
 def decision_maker(all_costs):
-    min_cost  = np.zeros(6, dtype= np.int)
+    min_cost  = np.zeros(6, dtype= np.float)
     min_index = np.zeros(6, dtype= np.int)
 
     winner_filter_index = 0
@@ -152,9 +152,11 @@ def calculate_F2(since_t_last_visit, n_ton_visits, t_to_invis, inf, science, n_t
 
 def calculate_F3(filters, f_name):       # filter urgency 0~1
     index = ['u','g','r','i','z','y'].index(f_name)
-    max_n_visit_in = max(f.n_visit_in for f in filters)
-    urgency = float(filters[index].n_visit_in) / (max_n_visit_in +1)
-    return filters[index].n_changed_to + urgency
+    max_n_visit_in = max(f.n_visit_in for f in filters) #for the night
+    night_urgency  = float(filters[index].n_visit_in) / (max_n_visit_in +1)
+    max_N_visit_in = max(f.N_visit_in for f in filters) # overall
+    overall_urgency= float(filters[index].N_visit_in) / (max_N_visit_in +1)
+    return filters[index].n_changed_to + night_urgency + overall_urgency
 
 
 def calculate_F4(alt, filter_name):              # altitude cost 0~1
@@ -167,9 +169,9 @@ def calculate_F4(alt, filter_name):              # altitude cost 0~1
 def calculate_F5(ha, filter):               # hour angle cost 0~1
     return np.abs(ha)
 
-def calculate_F6(N_visit_tot, Max_N_visit, N_visit_filter, Max_N_visit_filter, science):   # overall urgency 0~2
+def calculate_F6(N_visit_tot, Max_N_visit, N_visit_filter, Max_N_visit_filter, science, inf):   # overall urgency 0~2
     if science == 'DD':
-        return calculate_F6_DD(N_visit_tot, Max_N_visit, N_visit_filter, Max_N_visit_filter)
+        return calculate_F6_DD(N_visit_tot, Max_N_visit, N_visit_filter, Max_N_visit_filter, inf)
     if science == 'WFD':
         return calculate_F6_WFD(N_visit_tot, Max_N_visit, N_visit_filter, Max_N_visit_filter)
 
@@ -349,6 +351,6 @@ def alt_allocation(alt, filter_name):
         n_alt = 0.95
     if n_alt < 0.45:
         n_alt = 0.45
-    return 100*np.square(n_alt-traps[index]) + ((1./(1-np.cos(alt))) -1) * 5
+    return 80*np.square(n_alt-traps[index]) + ((1./(1-np.cos(alt))) -1) * 4
 
 

@@ -25,8 +25,8 @@ class DataFeed(object):
         cur.execute('SELECT ID, Dec, RA, Label, N_visit, Last_visit, N_visit_u, Last_visit_u, N_visit_g, Last_visit_g, '
                     'N_visit_r, Last_visit_r, N_visit_i, Last_visit_i, N_visit_z, Last_visit_z, N_visit_y, Last_visit_y FROM FieldsStatistics')
         input1 = pd.DataFrame(cur.fetchall(), columns = ['ID', 'Dec', 'RA', 'Label', 'N_visit', 't_visit',
-                                                         'N_visit_u', 't_visit_u', 'N_visit_r', 't_visit_r',
-                                                         'N_visit_i', 't_visit_i', 'N_visit_g', 't_visit_g',
+                                                         'N_visit_u', 't_visit_u', 'N_visit_g', 't_visit_g',
+                                                         'N_visit_r', 't_visit_r', 'N_visit_i', 't_visit_i',
                                                          'N_visit_z', 't_visit_z', 'N_visit_y', 't_visit_y'])
         self.n_fields = len(input1)
         # create fields objects and feed their parameters and data
@@ -173,7 +173,7 @@ class Scheduler(DataFeed):
             self.next_filter   = self.filters[winner_filter_index]
             self.filter_change = (self.episode.filter != self.next_filter)
             if self.filter_change:
-                print('\nfiltercheck');print(self.next_field.F[0], self.episode.filter.name, self.next_filter.name)
+                print(self.episode.filter.name, self.next_filter.name)
 
             # evaluate time of the visit
             t_visit = eval_t_visit(self.episode.t, self.next_field.slew_t_to, self.filter_change, 2 * ephem.minute)
@@ -183,6 +183,7 @@ class Scheduler(DataFeed):
             self.next_filter.update_visit_var(t_visit, self.episode.step)
             # record visit
             self.record_visit()
+            print(all_costs[743], winner_cost)
             if self.next_field.id == 744:
                 print(self.NightOutput[-1])
 
@@ -256,16 +257,19 @@ class EpisodeStatus(object):
         self.filter     = None                 # current filter
         self.filter_seq = None                 # sequence of filters used
         self.f_change_flag = None
-
+        self.DD_visit_done = None
 
     def init_episode(self, fields, filters):
         self.clock(0, reset = True)
         self.set_filter(filters, self.filter, initialization = True)
         self.set_fields(fields, self.field, initialization = True)
+        self.DD_visit_done = False
 
     def update_episode_var(self, dt, field, filter):
         self.clock(dt)
         self.field  = field
+        if is_DD(self.field):
+            self.DD_visit_done = True
         self.filter = filter
         self.filter_dynamic()
 

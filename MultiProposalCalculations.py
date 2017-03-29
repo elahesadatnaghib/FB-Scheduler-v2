@@ -73,7 +73,10 @@ def DDsurvey_filter_feasible(filter, current_field):
         if current_field.n_ton_visits[0][filter.name] != 0: # so next observation would be with a different filter
             return False
         if current_field.N_visit['all'] % 6 != 0: # so this is the second night that we expect three different filter compared to the last night
-            sort_visit_filter = np.sort(current_field.N_visit)
+            temp = np.array([current_field.N_visit['u'], current_field.N_visit['g'], current_field.N_visit['r'], current_field.N_visit['i'],
+                             current_field.N_visit['z'], current_field.N_visit['y']])
+            sort_visit_filter = np.sort(temp)
+            print (temp)
             if current_field.N_visit[filter.name] >= sort_visit_filter[3]:
                 return False
     print(current_field.id, filter.name, current_field.n_ton_visits[0])
@@ -84,14 +87,16 @@ def calculate_F2_DD(since_t_last_visit, n_ton_visits, t_to_invis, n_ton_visits_a
         return -inf
     return calculate_F2_WFD(since_t_last_visit, n_ton_visits, t_to_invis, inf)
 
-def calculate_F6_DD(N_visit_tot, Max_N_visit, N_visit_filter, Max_N_visit_filter):
+def calculate_F6_DD(N_visit_tot, Max_N_visit, N_visit_filter, Max_N_visit_filter, inf):
     if N_visit_tot % 6 != 0: #we need to complete the previous night's DD observation
-        return 0
+        if N_visit_filter >= N_visit_tot/3: # the first filter for the second DD night would be a new one
+            return inf
+        return -3
     return calculate_F6_WFD(N_visit_tot, Max_N_visit, N_visit_filter, Max_N_visit_filter)
 
 ''' Galactic plane '''
 
-''' North ecliptic '''
+''' North ecliptic spur'''
 
 '''South celestial pole '''
 
