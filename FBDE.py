@@ -30,7 +30,7 @@ class DataFeed(object):
                                                          'N_visit_z', 't_visit_z', 'N_visit_y', 't_visit_y'])
         self.n_fields = len(input1)
         # create fields objects and feed their parameters and data
-        dtype = [('ID', np.int), ('Dec', np.float), ('RA', np.float), ('Label', np.str), ('N_visit', np.int), ('t_visit', np.float),
+        dtype = [('ID', np.int), ('Dec', np.float), ('RA', np.float), ('Label', np.str_, 3), ('N_visit', np.int), ('t_visit', np.float),
                  ('N_visit_u', np.int), ('t_visit_u', np.float), ('N_visit_g', np.int), ('t_visit_g', np.float), ('N_visit_r', np.int),
                  ('t_visit_r', np.float), ('N_visit_i', np.int), ('t_visit_i', np.float), ('N_visit_z', np.int), ('t_visit_z', np.float),
                  ('N_visit_y', np.int), ('t_visit_y', np.float)]
@@ -60,6 +60,7 @@ class DataFeed(object):
         Max_N_visit_g = np.max(input1['N_visit_g']); Max_N_visit_r = np.max(input1['N_visit_r'])
         Max_N_visit_i = np.max(input1['N_visit_i']); Max_N_visit_z = np.max(input1['N_visit_z'])
         Max_N_visit_y = np.max(input1['N_visit_y'])
+
 
         del input1
 
@@ -107,11 +108,7 @@ class DataFeed(object):
 
         ''' Night variables'''
         Night_var = np.array([Max_N_visit, Max_N_visit_u, Max_N_visit_g,
-                              Max_N_visit_r, Max_N_visit_i, Max_N_visit_z, Max_N_visit_y],
-                             dtype = [('Max_n_visit', np.int), ('Max_n_visit_u', np.int),
-                                      ('Max_n_visit_g', np.int), ('Max_n_visit_r', np.int),
-                                      ('Max_n_visit_i', np.int), ('Max_n_visit_z', np.int), ('Max_n_visit_y', np.int)])
-
+                              Max_N_visit_r, Max_N_visit_i, Max_N_visit_z, Max_N_visit_y])
 
         # create fields
         self.fields = []
@@ -172,8 +169,11 @@ class Scheduler(DataFeed):
             self.next_field    = self.fields[winner_indx]
             self.next_filter   = self.filters[winner_filter_index]
             self.filter_change = (self.episode.filter != self.next_filter)
-            if self.filter_change:
-                print(self.episode.filter.name, self.next_filter.name)
+            print('\n')
+            print(winner_cost, self.next_field.id, self.next_field.label, self.next_filter.name, self.next_field.F)
+            print(self.next_field.F[5], self.next_field.N_visit[0]['all'], self.next_field.Max_N_visit[0]['all'],
+                  self.next_field.N_visit[0][f.name], self.next_field.Max_N_visit[0][f.name])
+            print(self.filters[0].feasible,self.filters[1].feasible, self.filters[2].feasible, self.filters[3].feasible, self.filters[4].feasible, self.filters[5].feasible)
 
             # evaluate time of the visit
             t_visit = eval_t_visit(self.episode.t, self.next_field.slew_t_to, self.filter_change, 2 * ephem.minute)
@@ -183,9 +183,6 @@ class Scheduler(DataFeed):
             self.next_filter.update_visit_var(t_visit, self.episode.step)
             # record visit
             self.record_visit()
-            print(all_costs[743], winner_cost)
-            if self.next_field.id == 744:
-                print(self.NightOutput[-1])
 
 
             '''prepare for the next visit'''
@@ -268,7 +265,7 @@ class EpisodeStatus(object):
     def update_episode_var(self, dt, field, filter):
         self.clock(dt)
         self.field  = field
-        if is_DD(self.field):
+        if field.label == 'DD':
             self.DD_visit_done = True
         self.filter = filter
         self.filter_dynamic()
@@ -358,13 +355,13 @@ class FiledState(object): # an object of this class stores the information and s
         self.N_visit['y']  = field_info['N_visit_y']
         self.t_visit['y']  = field_info['t_visit_y']
 
-        self.Max_N_visit['all']  = Night_var[0]['Max_n_visit']
-        self.Max_N_visit['u'] = Night_var[0]['Max_n_visit_u']
-        self.Max_N_visit['g'] = Night_var[0]['Max_n_visit_g']
-        self.Max_N_visit['r'] = Night_var[0]['Max_n_visit_r']
-        self.Max_N_visit['i'] = Night_var[0]['Max_n_visit_i']
-        self.Max_N_visit['z'] = Night_var[0]['Max_n_visit_z']
-        self.Max_N_visit['y'] = Night_var[0]['Max_n_visit_y']
+        self.Max_N_visit['all']  = Night_var[0]
+        self.Max_N_visit['u'] = Night_var[1]
+        self.Max_N_visit['g'] = Night_var[2]
+        self.Max_N_visit['r'] = Night_var[3]
+        self.Max_N_visit['i'] = Night_var[4]
+        self.Max_N_visit['z'] = Night_var[5]
+        self.Max_N_visit['y'] = Night_var[6]
 
         #self.year_vis =                      # visibility of the year to be added
         # by calculation

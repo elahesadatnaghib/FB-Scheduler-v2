@@ -22,7 +22,7 @@ Site.horizon    = 0.
 
 
 #F_weight        = [  9.41574316 , 14.82260668 , 10.88215625 , 13.99381687 , 18.69126356, 2.77361073 , 14.17433157]
-F_weight        = [1, 1, 1, 1, 1, 1, 1]
+F_weight        = [1, 3, 1, 1, 1, 1, 1]
 # F1: slew time cost 0~2
 # F2: night urgency -1~1
 # F3: overall urgency 0~1

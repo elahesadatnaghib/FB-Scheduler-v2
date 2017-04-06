@@ -16,8 +16,6 @@ def update(Schedule):
     t_end   = Schedule[-1]['ephemDate']
 
     N_visits = np.count_nonzero(Schedule['Field_id'])
-    N_DD     = 0  # number of deep drilling observations
-
 
     ''' Update the SCHEDULE db'''
     # Import last row of the data base
@@ -33,6 +31,7 @@ def update(Schedule):
         Field_id      = Schedule[index]['Field_id']
         ephemDate     = Schedule[index]['ephemDate']
         Filter        = Schedule[index]['Filter']
+        Label         = Schedule[index]['Label']
         n_ton         = Schedule[index]['n_ton']
         n_last        = Schedule[index]['n_last']
         Cost          = Schedule[index]['Cost']
@@ -52,18 +51,18 @@ def update(Schedule):
         F6            = Schedule[index]['F6']
         F7            = Schedule[index]['F7']
 
-        cur.execute('INSERT INTO Schedule VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
-                             (Visit_count, Field_id, ephemDate, Filter, n_ton, n_last, Cost, Slew_t/ephem.second,
+        cur.execute('INSERT INTO Schedule VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
+                             (Visit_count, Field_id, ephemDate, Filter, Label, n_ton, n_last, Cost, Slew_t/ephem.second,
                               t_since_v_ton, t_since_v_last, Alt, HA, t_to_invis, Sky_bri, Temp_coverage,
                               F1, F2, F3, F4, F5, F6, F7))
 
-        #detect deep drilling observation to be reflected in NightSummary
-        try:
-            if Field_id == Schedule[index+ 1]['Field_id'] and Field_id == Schedule[index+ 2]['Field_id']:
-                N_DD += 3
-        except:
-            pass
     ''' Update the NIGHT SUMMARY db'''
+    N_DD     = 0  # number of deep drilling observations
+    N_WFD_single    = 0; N_WFD_double    = 0; N_WFD_triple    = 0
+    N_GP_single     = 0; N_GP_double     = 0; N_GP_triple     = 0
+    N_NES_single    = 0; N_NES_double    = 0; N_NES_triple    = 0
+    N_SCP_single    = 0; N_SCP_double    = 0; N_SCP_triple    = 0
+
     # Import last row of the data base
     try:
         cur.execute('SELECT * FROM NightSummary ORDER BY Night_count DESC LIMIT 1')
@@ -97,10 +96,57 @@ def update(Schedule):
     Avg_alt     = np.average(Schedule['Alt'])
     Avg_ha      = np.average(Schedule['HA'])
 
+    mask1 = c == 1; mask2 = c == 2; mask3 = c == 3
+    single_visited_fields = u[mask1]
+    double_visited_fields = u[mask2]
+    triple_visited_fields = u[mask3]
 
-    cur.execute('INSERT INTO NightSummary VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
-                    (Night_count, t_start, t_end,  Initial_field, N_visits, N_DD, N_triple, N_double,
-                     N_single, N_per_hour, Avg_cost, Avg_slew_t/ephem.second, Avg_alt, Avg_ha))
+
+    for index, observation in enumerate(Schedule):
+        #detect deep drilling observation to be reflected in NightSummary
+        if observation['Label'] == 'DD':
+            N_DD += 1
+
+        if observation['Label'] == 'WFD':
+            if observation['Field_id'] in single_visited_fields:
+                N_WFD_single += 1
+            if observation['Field_id'] in double_visited_fields:
+                N_WFD_double += 1
+            if observation['Field_id'] in triple_visited_fields:
+                N_WFD_triple += 1
+
+        if observation['Label'] == 'GP':
+            if observation['Field_id'] in single_visited_fields:
+                N_GP_single += 1
+            if observation['Field_id'] in double_visited_fields:
+                N_GP_double += 1
+            if observation['Field_id'] in triple_visited_fields:
+                N_GP_triple += 1
+
+        if observation['Label'] == 'NES':
+            if observation['Field_id'] in single_visited_fields:
+                N_NES_single += 1
+            if observation['Field_id'] in double_visited_fields:
+                N_NES_double += 1
+            if observation['Field_id'] in triple_visited_fields:
+                N_NES_triple += 1
+
+        if observation['Label'] == 'SCP':
+            if observation['Field_id'] in single_visited_fields:
+                N_SCP_single += 1
+            if observation['Field_id'] in double_visited_fields:
+                N_SCP_double += 1
+            if observation['Field_id'] in triple_visited_fields:
+                N_SCP_triple += 1
+
+
+    cur.execute('INSERT INTO NightSummary VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
+                    (Night_count, t_start, t_end,  Initial_field, N_visits, N_DD,
+                     N_WFD_triple, N_WFD_double, N_WFD_single,
+                     N_GP_triple, N_GP_double, N_GP_single,
+                     N_NES_triple, N_NES_double, N_NES_single,
+                     N_SCP_triple, N_SCP_double, N_SCP_single,
+                     N_per_hour, Avg_cost, Avg_slew_t/ephem.second, Avg_alt, Avg_ha))
 
 
     ''' Update the FIELDS STATISTICS db'''

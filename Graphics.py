@@ -81,6 +81,7 @@ def visualize(Date, PlotID = 1,FPS = 15,Steps = 20,MP4_quality = 300, Name = "LS
     Obseved_toN,\
     ToN_History_line,\
     uu,gg,rr,ii,zz,yy,\
+    WFD_single,\
     last_10_History_line,\
     Horizon, airmass_horizon, S_Pole,\
     LSST,\
@@ -90,6 +91,7 @@ def visualize(Date, PlotID = 1,FPS = 15,Steps = 20,MP4_quality = 300, Name = "LS
                   [], [], '*',
                   [], [], '*',
                   [], [], '*',[], [], '*',[], [], '*', [], [], '*',[], [], '*',[], [], '*', #filters
+                  [], [], '*', #WFD single
                   [], [], '-',
                   [], [], '-',[], [], '-',[], [], 'D',
                   [], [], 'o',
@@ -121,13 +123,15 @@ def visualize(Date, PlotID = 1,FPS = 15,Steps = 20,MP4_quality = 300, Name = "LS
     ToN_History_line.set_color('orange');   ToN_History_line.set_lw(.5)
     last_10_History_line.set_color('gray');  last_10_History_line.set_lw(.5)
 
-    # proposal
-    # s
-    WFD.set_color('dimgray');               #WFD.set_alpha(0.3)
-    SE.set_color('green');                  #SE.set_alpha(0.3)
-    NE.set_color('blue');                   #NE.set_alpha(0.3)
-    GP.set_color('red');                    #GP.set_alpha(0.3)
-    #DD.set_color('black');                 #DD.set_alpha(0.3); DD.set_markersize(7)
+    # proposals
+    WFD.set_color('dimgray');               WFD.set_alpha(0.5)
+    SE.set_color('green');                  SE.set_alpha(0.5)
+    NE.set_color('blue');                   NE.set_alpha(0.5)
+    GP.set_color('red');                    GP.set_alpha(0.5)
+    DD.set_color('black');                  DD.set_alpha(0.5); DD.set_markersize(7)
+
+    # WFD single visits
+    WFD_single.set_color('dimgray');          WFD.set_alpha(0.5); WFD_single.set_markersize(10)
 
     LSST.set_color('red'); LSST.set_markersize(8)
 
@@ -182,6 +186,10 @@ def visualize(Date, PlotID = 1,FPS = 15,Steps = 20,MP4_quality = 300, Name = "LS
     S_Pole.set_data(x, y)
     ax.text(x+ .05, y, 'S-Pole', color = 'white', fontsize = 7)
     DD_indicator = ax.text(-1.4,1.3, 'Deep Drilling Observation', color = 'red', fontsize = 9, visible = False)
+    WFD_indicator = ax.text(-1.4,1.3, 'White Fast Deep Observation', color = 'white', fontsize = 9, visible = False)
+    GP_indicator = ax.text(-1.4,1.3, 'Galactic Plane Observation', color = 'white', fontsize = 9, visible = False)
+    NES_indicator = ax.text(-1.4,1.3, 'Notrh Ecliptic Spur Observation', color = 'white', fontsize = 9, visible = False)
+    SCP_indicator = ax.text(-1.4,1.3, 'South Celestial Pole Observation', color = 'white', fontsize = 9, visible = False)
 
     # Observed last night fields
     cur.execute('SELECT Field_id FROM Schedule WHERE ephemDate BETWEEN (?) AND (?)',(lastN_start, lastN_end))
@@ -192,14 +200,15 @@ def visualize(Date, PlotID = 1,FPS = 15,Steps = 20,MP4_quality = 300, Name = "LS
         F1 = []
 
     # Tonight observation path
-    cur.execute('SELECT Field_id, ephemDate, filter FROM Schedule WHERE ephemDate BETWEEN (?) AND (?)',(toN_start, toN_end))
+    cur.execute('SELECT Field_id, ephemDate, filter, Label FROM Schedule WHERE ephemDate BETWEEN (?) AND (?)',(toN_start, toN_end))
     row = cur.fetchall()
     if row[0][0] is not None:
         F2 = [x[0] for x in row]
         F2_timing = [x[1] for x in row]
         F2_filtering = [x[2] for x in row]
+        F2_region    = [x[3] for x in row]
     else:
-        F2 = []; F2_timing = []; F2_filtering = []
+        F2 = []; F2_timing = []; F2_filtering = []; F2_region = []
 
     # Sky elements
     Moon = Circle((0, 0), 0, color = 'silver', zorder = 3)
@@ -223,6 +232,7 @@ def visualize(Date, PlotID = 1,FPS = 15,Steps = 20,MP4_quality = 300, Name = "LS
             visit_index = 0
             visited_field = 0
             visit_index_u = 0; visit_index_g = 0; visit_index_r = 0; visit_index_i = 0; visit_index_z = 0; visit_index_y = 0
+            visit_index_wfd_s = 0
             visit_filter  = 'r'
 
 
@@ -232,6 +242,8 @@ def visualize(Date, PlotID = 1,FPS = 15,Steps = 20,MP4_quality = 300, Name = "LS
             U_X = []; U_Y = []; G_X = []; G_Y = []; R_X = []; R_Y = []; I_X = []; I_Y = []; Z_X = []; Z_Y = []; Y_X = []; Y_Y = []
             # Coloring different proposals
             WFD_X = []; WFD_Y = []; NE_X = []; NE_Y = []; SE_X = []; SE_Y = []; GP_X = []; GP_Y = []; DD_X = []; DD_Y = []
+            #WFD single visits
+            WFD_s_X = []; WFD_s_Y = []
 
 
             # F1  coordinate:
@@ -247,6 +259,13 @@ def visualize(Date, PlotID = 1,FPS = 15,Steps = 20,MP4_quality = 300, Name = "LS
                 if Alt > 0:
                     X, Y    = AltAz2XY(Alt,Az)
                     F2_X.append(X); F2_Y.append(Y)
+
+                    if t >= tau:
+                        visit_index = len(F2_X) -1
+                        visited_field = i
+                        visit_filter  = filter
+
+                    # filter colored observation
                     if filter == 'u':
                         U_X.append(X); U_Y.append(Y)
                         if t >= tau:
@@ -272,10 +291,16 @@ def visualize(Date, PlotID = 1,FPS = 15,Steps = 20,MP4_quality = 300, Name = "LS
                         if t >= tau:
                             visit_index_y = len(Y_Y) -1
 
-                    if t >= tau:
-                        visit_index = len(F2_X) -1
-                        visited_field = i
-                        visit_filter  = filter
+            for i, tau in zip(F2, F2_timing):
+                #white fast deep single visits
+                if np.sum(np.asanyarray(F2[0:visit_index]) == i) == 1 and All_Fields[i -1][3] == 'WFD':
+                    Alt, Az = Fields_local_coordinate(All_Fields[i-1][1], All_Fields[i-1][2], t, Site)
+                    if Alt > 0:
+                        X, Y    = AltAz2XY(Alt,Az)
+                        WFD_s_X.append(X); WFD_s_Y.append(Y)
+                        if t >= tau:
+                            visit_index_wfd_s = len(WFD_s_Y) -1
+
 
 
             # F3  coordinate:
@@ -322,6 +347,9 @@ def visualize(Date, PlotID = 1,FPS = 15,Steps = 20,MP4_quality = 300, Name = "LS
             WFD.set_data([WFD_X, WFD_Y]); DD.set_data([DD_X,DD_Y]); NE.set_data([NE_X, NE_Y]); SE.set_data([SE_X, SE_Y])
             GP.set_data([GP_X, GP_Y])
 
+            # WFD singles
+            WFD_single.set_data([WFD_s_X[0:visit_index_wfd_s], WFD_s_Y[0:visit_index_wfd_s]])
+
             # telescope position and color
             LSST.set_data([F2_X[visit_index],F2_Y[visit_index]])
             if visit_filter == 'u':
@@ -365,15 +393,34 @@ def visualize(Date, PlotID = 1,FPS = 15,Steps = 20,MP4_quality = 300, Name = "LS
                 covering.set_data(All_Fields[:,0], tot)
 
             #Update indicators of the proposal
-            if is_DD(F2[time_index]):
+            if F2_region[time_index]== 'DD':
                 DD_indicator.set_visible(True)
             else:
                 DD_indicator.set_visible(False)
+            if F2_region[time_index]== 'WFD':
+                WFD_indicator.set_visible(True)
+            else:
+                WFD_indicator.set_visible(False)
+            if F2_region[time_index]== 'GP':
+                GP_indicator.set_visible(True)
+            else:
+                GP_indicator.set_visible(False)
+            if F2_region[time_index]== 'NES':
+                NES_indicator.set_visible(True)
+            else:
+                NES_indicator.set_visible(False)
+            if F2_region[time_index]== 'DD':
+                SCP_indicator.set_visible(True)
+            else:
+                SCP_indicator.set_visible(False)
 
 
             #Observation statistics
-            leg = plt.legend([Observed_lastN, Obseved_toN],
-                       ['Visited last night', time_index])
+            leg = plt.legend([Observed_lastN, Obseved_toN, uu, gg, rr, ii, zz, yy],
+                       ['Visited last night', time_index,
+                        'u filter', 'g filter', 'r filter', 'i filter', 'z filter', 'y filter'],
+                             bbox_to_anchor=(1, 1), loc=2, borderaxespad=0.)
+
             for l in leg.get_texts():
                 l.set_fontsize(6)
             date = ephem.date(t)
@@ -393,8 +440,6 @@ def visualize(Date, PlotID = 1,FPS = 15,Steps = 20,MP4_quality = 300, Name = "LS
 
 
 
-
-
 Site            = ephem.Observer()
 Site.lon        = -1.2320792
 Site.lat        = -0.517781017
@@ -407,7 +452,7 @@ n_nights = 1 # number of the nights to be scheduled starting from 1st Jan. 2021
 Date_start = ephem.Date('2015/6/28 12:00:00.00') # times are in UT
 
 for i in range(n_nights):
-    Date = ephem.Date(Date_start + i) +2# times are in UT
+    Date = ephem.Date(Date_start + i) # times are in UT
 
     # create animation
     FPS = 10            # Frame per second

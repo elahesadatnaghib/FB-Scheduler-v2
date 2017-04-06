@@ -5,7 +5,7 @@ import ephem
 from operator import attrgetter
 from MultiProposalCalculations import *
 
-sciences = ["WFD", "DD", "GP", "NE", "SE"]
+regions = ["WFD", "DD", "GP", "NE", "SE"]
 
 def eval_init_state(fields, suggestion, manual = False):        # TODO Feasibility of the initial field needs to be checked
     if manual:
@@ -19,40 +19,22 @@ def eval_init_state(fields, suggestion, manual = False):        # TODO Feasibili
 def eval_init_filter(filters):
     return filters[3]
 
-def eval_feasibility(field):
-    if not basic_feasible(field):
-        return False
-    science = detect_science(field)
-    if science == "WFD":
-        if not universalsurvey_feasible(field):
-            return False
-    elif science == "DD":
-        if not DDsurvey_feasible(field):
-            return False
-    return True
-
-def eval_feasibility_filter(filter, current_filter, current_field):
-    science = detect_science(current_field)
-    if science == "WFD":
-        if not universalsurvey_filter_feasible(filter, current_filter):
-            return False
-    elif science == "DD":
-        if not DDsurvey_filter_feasible(filter, current_field):
-            return False
-    return True
 
 def eval_basis_fcn(field, curr_filter_name, filters):
     F    = np.zeros(7, dtype = [('u', np.float),('g', np.float),('r', np.float),('i', np.float),('z', np.float),('y', np.float)])  # 7 is the number of basis functions
-    science = detect_science(field)
+    region = field.label
     for f in filters:
         if f.feasible:
-            F[0][f.name] = calculate_F1(field.slew_t_to, f.name, curr_filter_name)
-            F[1][f.name] = calculate_F2(field.since_t_last_visit[0][f.name], field.n_ton_visits[0][f.name], field.t_to_invis, field.inf, science, field.n_ton_visits[0]['all'])
-            F[2][f.name] = calculate_F3(filters, f.name)
-            F[3][f.name] = calculate_F4(field.alt, f.name)
-            F[4][f.name] = calculate_F5(field.ha, f.name)
-            F[5][f.name] = calculate_F6(field.N_visit['all'][0], field.Max_N_visit['all'], field.N_visit[0][f.name], field.Max_N_visit[0][f.name], science, field.inf)
-            F[6][f.name] = calculate_F7(field.brightness,field.moonsep, f.name)
+            F[0][f.name] = calculate_F1(region, slew_t_to=field.slew_t_to, filter_name=f.name, curr_filter_name=curr_filter_name)
+            F[1][f.name] = calculate_F2(region, since_t_last_visit=field.since_t_last_visit[0][f.name],
+                                        n_ton_visits=field.n_ton_visits[0]['all'], t_to_invis=field.t_to_invis, inf=field.inf,
+                                        N_visit_tot=field.N_visit[0]['all'], N_visit_filter=field.N_visit[0][f.name])
+            F[2][f.name] = calculate_F3(region, filters = filters, f_name=f.name, n_ton_visits=field.n_ton_visits[0]['all'])
+            F[3][f.name] = calculate_F4(region, alt=field.alt, filter_name=f.name, dec=field.dec, n_ton_visits=field.n_ton_visits[0]['all'])
+            F[4][f.name] = calculate_F5(region, ha=field.ha)
+            F[5][f.name] = calculate_F6(region, N_visit_tot=field.N_visit[0]['all'], Max_N_visit=field.Max_N_visit[0]['all'],
+                                        N_visit_filter=field.N_visit[0][f.name], Max_N_visit_filter=field.Max_N_visit[0][f.name])
+            F[6][f.name] = calculate_F7(region, brightness=field.brightness, moonsep=field.moonsep, filter_name=f.name)
         else:
             F[0][f.name] = None
             F[1][f.name] = None
@@ -136,65 +118,11 @@ def eval_performance(episode_output, preferences):
 
     return p
 
-
-def calculate_F1(slew_t_to, filter, curr_filter):            # slew time cost 0~2
-    normalized_slew = (slew_t_to /ephem.second) /5
-    if filter == curr_filter:
-        return normalized_slew
-    else:
-        return normalized_slew + 5 # count for filter change time cost
-
-def calculate_F2(since_t_last_visit, n_ton_visits, t_to_invis, inf, science, n_ton_visits_all):   # night urgency 0~10
-    if science == "DD":
-        return calculate_F2_DD(since_t_last_visit, n_ton_visits, t_to_invis, n_ton_visits_all, inf)
-    if science == "WFD":
-        return calculate_F2_WFD(since_t_last_visit, n_ton_visits, t_to_invis, inf)
-
-def calculate_F3(filters, f_name):       # filter urgency 0~1
-    index = ['u','g','r','i','z','y'].index(f_name)
-    max_n_visit_in = max(f.n_visit_in for f in filters) #for the night
-    night_urgency  = float(filters[index].n_visit_in) / (max_n_visit_in +1)
-    max_N_visit_in = max(f.N_visit_in for f in filters) # overall
-    overall_urgency= float(filters[index].N_visit_in) / (max_N_visit_in +1)
-    return filters[index].n_changed_to + night_urgency + overall_urgency
-
-
-def calculate_F4(alt, filter_name):              # altitude cost 0~1
-    #filter_indep_alt_cost = (1./(1-np.cos(alt))) -1 # 0~2.5
-    #filter_indep_alt_cost = 1- alt/np.pi
-    #filter_corr_alt_cost  = corr_alt_for_filter(filter_indep_alt_cost, filter_name)
-    filter_corr_alt_cost   = alt_allocation(alt, filter_name)
-    return filter_corr_alt_cost
-
-def calculate_F5(ha, filter):               # hour angle cost 0~1
-    return np.abs(ha)
-
-def calculate_F6(N_visit_tot, Max_N_visit, N_visit_filter, Max_N_visit_filter, science, inf):   # overall urgency 0~2
-    if science == 'DD':
-        return calculate_F6_DD(N_visit_tot, Max_N_visit, N_visit_filter, Max_N_visit_filter, inf)
-    if science == 'WFD':
-        return calculate_F6_WFD(N_visit_tot, Max_N_visit, N_visit_filter, Max_N_visit_filter)
-
-def calculate_F7(brightness, moonsep, filter_name):       # normalized brightness 0~1 #TODO has to go to the constraints
-    if moonsep < np.deg2rad(25) and filter_name == 'u':
-        return 1e10
-    if moonsep < np.deg2rad(20) and filter_name == 'g':
-        return 1e10
-    if moonsep < np.deg2rad(15) and filter_name == 'r':
-        return 1e10
-    if moonsep < np.deg2rad(10) and filter_name == 'i':
-        return 1e10
-    if moonsep < np.deg2rad(5) and filter_name == 'z':
-        return 1e10
-    if moonsep < np.deg2rad(0) and filter_name == 'y':
-        return 1e10
-    return brightness
-
-
 # miscellaneous
 def record_assistant(field, t, filter_name, output_dtype, first_entry = False):
     if first_entry:
         entry = np.array((field.id,
+                          field.label,
                           float(t),
                           filter_name,
                           field.n_ton_visits[0]['all'],
@@ -235,6 +163,7 @@ def record_assistant(field, t, filter_name, output_dtype, first_entry = False):
                           0., 0., 0., 0., 0., 0., 0.), dtype = output_dtype)
     else:
         entry = np.array((field.id,
+                          field.label,
                           float(t),
                           filter_name,
                           field.n_ton_visits[0]['all'],
@@ -279,6 +208,7 @@ def record_assistant(field, t, filter_name, output_dtype, first_entry = False):
 
 def format_output():
     output_dtype = [('Field_id', np.int),
+                         ('Label', np.str_, 3),
                          ('ephemDate', np.float),
                          ('Filter', np.str_, 1),
                          ('n_ton', np.int),
@@ -324,33 +254,3 @@ def format_output():
                          ('F6', np.float),
                          ('F7', np.float)]
     return output_dtype
-
-
-def corr_alt_for_filter(x, filter_name):
-    filters = ['u', 'g', 'r', 'i', 'z', 'y']
-    break_point = 0.2
-    # values at 0, breakpoint, and 1
-    vals = np.array([(0,0.1,4.5),(.2,.4,4.4),(.4,.7,4.3),(.6,1.0,4.2),(.8,1.3,4.1),(1,1.6,4)])
-    for index,f in enumerate(filters):
-        if filter_name == f:  # 2piece linear
-            if x <= break_point:
-                a = (vals[index][1] - vals[index][0])/ break_point
-                b = vals[index][0]
-                y = a*x + b
-            else:
-                a = (vals[index][2] - vals[index][1])/ (1-break_point)
-                b = vals[index][1]
-                y = a*x + b
-            return y
-
-def alt_allocation(alt, filter_name):
-    n_alt = 2*alt/np.pi
-    index = ['u', 'g', 'r', 'i', 'z', 'y'].index(filter_name)
-    traps = np.array([0.95,0.85,0.75,0.65,0.55,0.45])
-    if n_alt > 0.95:
-        n_alt = 0.95
-    if n_alt < 0.45:
-        n_alt = 0.45
-    return 80*np.square(n_alt-traps[index]) + ((1./(1-np.cos(alt))) -1) * 4
-
-
